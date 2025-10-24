@@ -389,24 +389,49 @@
   border: 1px solid #ddd;
 }
 
-.legend-color.compressed {
-  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+/* Legend colors for encodings */
+.legend-color.encoding-plain {
+  background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
 }
 
-.legend-color.uncompressed {
-  background: linear-gradient(135deg, #ffa726 0%, #ff9800 100%);
+.legend-color.encoding-rle {
+  background: linear-gradient(135deg, #4caf50 0%, #388e3c 100%);
 }
 
-.legend-color.data-page-color {
-  background-color: #1976d2;
+.legend-color.encoding-plain-dictionary {
+  background: linear-gradient(135deg, #00bcd4 0%, #0097a7 100%);
 }
 
-.legend-color.dictionary-page-color {
-  background-color: #7b1fa2;
+.legend-color.encoding-rle-dictionary {
+  background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
 }
 
-.legend-color.unknown-page-color {
-  background-color: #666;
+.legend-color.encoding-delta-binary-packed {
+  background: linear-gradient(135deg, #009688 0%, #00796b 100%);
+}
+
+.legend-color.encoding-delta-length-byte-array {
+  background: linear-gradient(135deg, #cddc39 0%, #afb42b 100%);
+}
+
+.legend-color.encoding-delta-byte-array {
+  background: linear-gradient(135deg, #ffc107 0%, #ffa000 100%);
+}
+
+.legend-color.encoding-bit-packed {
+  background: linear-gradient(135deg, #ff5722 0%, #e64a19 100%);
+}
+
+.legend-color.encoding-byte-stream-split {
+  background: linear-gradient(135deg, #e91e63 0%, #c2185b 100%);
+}
+
+.legend-color.encoding-group-var-int {
+  background: linear-gradient(135deg, #795548 0%, #5d4037 100%);
+}
+
+.legend-color.encoding-unknown {
+  background: linear-gradient(135deg, #757575 0%, #616161 100%);
 }
 
 .legend-divider {
@@ -472,12 +497,14 @@
   width: 45px;
   opacity: 0.5;
   z-index: 1;
+  background: linear-gradient(180deg, #ffa726 0%, #ff9800 100%);
 }
 
 /* Compressed bar - narrower and fully opaque to show in foreground */
 .histogram-bar.compressed {
   width: 30px;
   z-index: 2;
+  background: linear-gradient(180deg, #646cff 0%, #535bf2 100%);
 }
 
 .histogram-bar:hover {
@@ -485,37 +512,103 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
-/* Default gradients */
-.histogram-bar.compressed:not(.data-page):not(.dictionary-page):not(.unknown) {
-  background: linear-gradient(180deg, #646cff 0%, #535bf2 100%);
-}
-
-.histogram-bar.uncompressed:not(.data-page):not(.dictionary-page):not(.unknown) {
-  background: linear-gradient(180deg, #ffa726 0%, #ff9800 100%);
-}
-
-/* Page type color modifications */
-.histogram-bar.compressed.data-page {
+/* Encoding-based color modifications (override default colors) */
+/* PLAIN encoding - Blue */
+.histogram-bar.compressed.encoding-plain {
   background: linear-gradient(180deg, #2196f3 0%, #1976d2 100%);
 }
 
-.histogram-bar.uncompressed.data-page {
+.histogram-bar.uncompressed.encoding-plain {
   background: linear-gradient(180deg, #64b5f6 0%, #42a5f5 100%);
 }
 
-.histogram-bar.compressed.dictionary-page {
+/* RLE encoding - Green */
+.histogram-bar.compressed.encoding-rle {
+  background: linear-gradient(180deg, #4caf50 0%, #388e3c 100%);
+}
+
+.histogram-bar.uncompressed.encoding-rle {
+  background: linear-gradient(180deg, #81c784 0%, #66bb6a 100%);
+}
+
+/* PLAIN_DICTIONARY encoding - Cyan */
+.histogram-bar.compressed.encoding-plain-dictionary {
+  background: linear-gradient(180deg, #00bcd4 0%, #0097a7 100%);
+}
+
+.histogram-bar.uncompressed.encoding-plain-dictionary {
+  background: linear-gradient(180deg, #4dd0e1 0%, #26c6da 100%);
+}
+
+/* RLE_DICTIONARY encoding - Purple */
+.histogram-bar.compressed.encoding-rle-dictionary {
   background: linear-gradient(180deg, #9c27b0 0%, #7b1fa2 100%);
 }
 
-.histogram-bar.uncompressed.dictionary-page {
+.histogram-bar.uncompressed.encoding-rle-dictionary {
   background: linear-gradient(180deg, #ba68c8 0%, #ab47bc 100%);
 }
 
-.histogram-bar.compressed.unknown {
+/* DELTA_BINARY_PACKED encoding - Teal */
+.histogram-bar.compressed.encoding-delta-binary-packed {
+  background: linear-gradient(180deg, #009688 0%, #00796b 100%);
+}
+
+.histogram-bar.uncompressed.encoding-delta-binary-packed {
+  background: linear-gradient(180deg, #4db6ac 0%, #26a69a 100%);
+}
+
+/* DELTA_LENGTH_BYTE_ARRAY encoding - Lime */
+.histogram-bar.compressed.encoding-delta-length-byte-array {
+  background: linear-gradient(180deg, #cddc39 0%, #afb42b 100%);
+}
+
+.histogram-bar.uncompressed.encoding-delta-length-byte-array {
+  background: linear-gradient(180deg, #dce775 0%, #d4e157 100%);
+}
+
+/* DELTA_BYTE_ARRAY encoding - Amber */
+.histogram-bar.compressed.encoding-delta-byte-array {
+  background: linear-gradient(180deg, #ffc107 0%, #ffa000 100%);
+}
+
+.histogram-bar.uncompressed.encoding-delta-byte-array {
+  background: linear-gradient(180deg, #ffd54f 0%, #ffca28 100%);
+}
+
+/* BIT_PACKED encoding - Deep Orange */
+.histogram-bar.compressed.encoding-bit-packed {
+  background: linear-gradient(180deg, #ff5722 0%, #e64a19 100%);
+}
+
+.histogram-bar.uncompressed.encoding-bit-packed {
+  background: linear-gradient(180deg, #ff8a65 0%, #ff7043 100%);
+}
+
+/* BYTE_STREAM_SPLIT encoding - Pink */
+.histogram-bar.compressed.encoding-byte-stream-split {
+  background: linear-gradient(180deg, #e91e63 0%, #c2185b 100%);
+}
+
+.histogram-bar.uncompressed.encoding-byte-stream-split {
+  background: linear-gradient(180deg, #f06292 0%, #ec407a 100%);
+}
+
+/* GROUP_VAR_INT encoding (deprecated) - Brown */
+.histogram-bar.compressed.encoding-group-var-int {
+  background: linear-gradient(180deg, #795548 0%, #5d4037 100%);
+}
+
+.histogram-bar.uncompressed.encoding-group-var-int {
+  background: linear-gradient(180deg, #a1887f 0%, #8d6e63 100%);
+}
+
+/* Unknown encoding - Grey */
+.histogram-bar.compressed.encoding-unknown {
   background: linear-gradient(180deg, #757575 0%, #616161 100%);
 }
 
-.histogram-bar.uncompressed.unknown {
+.histogram-bar.uncompressed.encoding-unknown {
   background: linear-gradient(180deg, #9e9e9e 0%, #757575 100%);
 }
 
@@ -545,6 +638,14 @@
   opacity: 1;
 }
 
+.histogram-labels {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 1rem;
+}
+
 .histogram-label {
   font-size: 0.75rem;
   color: #666;
@@ -552,8 +653,37 @@
   text-align: center;
   transform: rotate(-45deg);
   transform-origin: center;
-  margin-top: 1rem;
   white-space: nowrap;
+}
+
+.histogram-label-dict {
+  font-size: 0.65rem;
+  color: #9c27b0;
+  font-weight: 700;
+  text-align: center;
+  background-color: rgba(156, 39, 176, 0.1);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  border: 1px solid rgba(156, 39, 176, 0.3);
+  white-space: nowrap;
+}
+
+.histogram-label-data {
+  font-size: 0.65rem;
+  color: #1976d2;
+  font-weight: 700;
+  text-align: center;
+  background-color: rgba(33, 150, 243, 0.1);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  white-space: nowrap;
+}
+
+.histogram-label-dict.histogram-label-placeholder {
+  visibility: hidden;
+  border: 1px solid transparent;
+  background-color: transparent;
 }
 
 .histogram-info {

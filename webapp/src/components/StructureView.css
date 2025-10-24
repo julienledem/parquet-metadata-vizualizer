@@ -50,6 +50,16 @@
   padding: 0.5rem 0.75rem;
 }
 
+.structure-section.offset-index {
+  background-color: #fff9c4;
+  border-left: 4px solid #fbc02d;
+}
+
+.structure-section.column-index {
+  background-color: #ffe0b2;
+  border-left: 4px solid #f57c00;
+}
+
 .structure-section.footer {
   background-color: #e8f5e9;
   border-left: 4px solid #4caf50;

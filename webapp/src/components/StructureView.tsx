@@ -73,6 +73,47 @@ function StructureView({ metadata }: StructureViewProps) {
       })
     })
 
+    // Calculate offset index and column index sizes
+    let totalOffsetIndexSize = 0
+    let totalColumnIndexSize = 0
+    let offsetIndexCount = 0
+    let columnIndexCount = 0
+
+    fileMetadata.rowGroups.forEach((rg: any) => {
+      rg.columns.forEach((col: any) => {
+        if (col.offset_index_offset !== undefined && col.offset_index_length !== undefined) {
+          totalOffsetIndexSize += col.offset_index_length
+          offsetIndexCount++
+        }
+        if (col.column_index_offset !== undefined && col.column_index_length !== undefined) {
+          totalColumnIndexSize += col.column_index_length
+          columnIndexCount++
+        }
+      })
+    })
+
+    // Offset indexes (if present)
+    if (totalOffsetIndexSize > 0) {
+      layout.push({
+        type: 'offset-index',
+        label: `Offset Indexes (${offsetIndexCount} indexes, page location metadata)`,
+        start: currentOffset,
+        size: totalOffsetIndexSize,
+      })
+      currentOffset += totalOffsetIndexSize
+    }
+
+    // Column indexes (if present)
+    if (totalColumnIndexSize > 0) {
+      layout.push({
+        type: 'column-index',
+        label: `Column Indexes (${columnIndexCount} indexes, statistics per page)`,
+        start: currentOffset,
+        size: totalColumnIndexSize,
+      })
+      currentOffset += totalColumnIndexSize
+    }
+
     // Footer (exact size from metadata)
     const footerStart = currentOffset
     const footerSize = fileMetadata.footerLength || 0 // Use actual size from metadata
@@ -93,7 +134,7 @@ function StructureView({ metadata }: StructureViewProps) {
       <div className="structure-header">
         <h2>File Structure Layout</h2>
         <p className="structure-description">
-          Visual representation of the physical layout of the Parquet file showing headers, row groups, column chunks, and footer.
+          Visual representation of the physical layout of the Parquet file showing headers, row groups, column chunks, page indexes, and footer.
         </p>
       </div>
 

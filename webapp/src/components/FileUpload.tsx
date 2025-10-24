@@ -4,7 +4,7 @@ import type { ParquetPageMetadata } from '../../../src/lib/parquet-parsing'
 import './FileUpload.css'
 
 interface FileUploadProps {
-  onFileLoaded: (fileName: string, metadata: ParquetPageMetadata) => void
+  onFileLoaded: (fileName: string, metadata: ParquetPageMetadata, file: File) => void
 }
 
 function FileUpload({ onFileLoaded }: FileUploadProps) {
@@ -34,7 +34,7 @@ function FileUpload({ onFileLoaded }: FileUploadProps) {
       console.log(`[FileUpload] Total columns: ${metadata.fileMetadata.numColumns}`)
       console.log(`[FileUpload] Total rows: ${metadata.fileMetadata.numRows}`)
 
-      onFileLoaded(file.name, metadata)
+      onFileLoaded(file.name, metadata, file)
     } catch (err) {
       console.error('[FileUpload] Error parsing file:', err)
       if (err instanceof Error) {

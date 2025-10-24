@@ -6,6 +6,8 @@
  */
 
 import { parquetMetadata, readOffsetIndex } from 'hyparquet'
+import { deserializeTCompactProtocol } from 'hyparquet/src/thrift.js'
+import { PageType, Encoding } from 'hyparquet/src/constants.js'
 
 /**
  * File metadata extracted from the Parquet footer
@@ -33,6 +35,37 @@ export interface PageInfo {
   compressedSize?: number
   uncompressedSize?: number
   firstRowIndex?: bigint
+  numValues?: number
+  crc?: number
+  dataPageHeader?: {
+    num_values: number
+    encoding: string
+    definition_level_encoding: string
+    repetition_level_encoding: string
+    statistics?: {
+      max?: any
+      min?: any
+      null_count?: any
+      distinct_count?: any
+      max_value?: any
+      min_value?: any
+    }
+  }
+  dictionaryPageHeader?: {
+    num_values: number
+    encoding: string
+    is_sorted?: boolean
+  }
+  dataPageHeaderV2?: {
+    num_values: number
+    num_nulls: number
+    num_rows: number
+    encoding: string
+    definition_levels_byte_length: number
+    repetition_levels_byte_length: number
+    is_compressed: boolean
+    statistics?: any
+  }
 }
 
 /**
@@ -403,65 +436,133 @@ export async function parseParquetPage(
 
   let pageNumber = 0
   const totalCompressedSize = Number(colMeta.total_compressed_size)
+  const endOffset = currentOffset + totalCompressedSize
 
-  // We need to read page headers sequentially
-  // Each page has a header followed by data
-  // The header tells us the size of the page data
+  // Read all page data at once for parsing
+  // We need the entire column chunk data to parse all page headers sequentially
+  const buffer = await readByteRange(currentOffset, totalCompressedSize)
+
+  let bufferOffset = 0
 
   try {
-    // Read the first chunk to parse page headers
-    // Page headers are typically small (< 100 bytes each)
-    // We'll read a reasonable chunk and parse what we can
-    const initialReadSize = Math.min(8192, totalCompressedSize) // Read up to 8KB
-    const buffer = await readByteRange(currentOffset, initialReadSize)
+    // Parse each page header sequentially
+    while (bufferOffset < buffer.byteLength && currentOffset + bufferOffset < endOffset) {
+      const pageStartOffset = currentOffset + bufferOffset
 
-    let offset = 0
+      // Create a reader for the Thrift parser
+      const reader = {
+        view: new DataView(buffer, bufferOffset),
+        offset: 0
+      }
 
-    // Parse pages until we've read all the data
-    // Note: This is a simplified implementation
-    // A complete implementation would use proper Thrift parsing
-    while (offset < buffer.byteLength && pageNumber < 100) { // Safety limit
-      // Page header structure (simplified):
-      // - type (4 bytes)
-      // - uncompressed_page_size (4 bytes)
-      // - compressed_page_size (4 bytes)
-      // - CRC (4 bytes, optional)
-      // + additional fields depending on page type
+      // Parse the PageHeader using hyparquet's parquetHeader logic
+      const pageHeader = parquetHeader(reader)
 
-      // For now, we'll create basic page entries
-      // A full implementation would parse the Thrift-encoded page header
+      // Extract encoding for convenience
+      let encoding: string | undefined
+      if (pageHeader.data_page_header) {
+        encoding = pageHeader.data_page_header.encoding
+      } else if (pageHeader.dictionary_page_header) {
+        encoding = pageHeader.dictionary_page_header.encoding
+      } else if (pageHeader.data_page_header_v2) {
+        encoding = pageHeader.data_page_header_v2.encoding
+      }
+
+      let numValues: number | undefined
+      if (pageHeader.data_page_header) {
+        numValues = pageHeader.data_page_header.num_values
+      } else if (pageHeader.data_page_header_v2) {
+        numValues = pageHeader.data_page_header_v2.num_values
+      } else if (pageHeader.dictionary_page_header) {
+        numValues = pageHeader.dictionary_page_header.num_values
+      }
+
       pages.push({
         pageNumber: pageNumber++,
-        offset: BigInt(currentOffset + offset),
+        pageType: pageHeader.type,
+        encoding,
+        offset: BigInt(pageStartOffset),
+        compressedSize: pageHeader.compressed_page_size,
+        uncompressedSize: pageHeader.uncompressed_page_size,
+        numValues: numValues,
+        crc: pageHeader.crc,
+        dataPageHeader: pageHeader.data_page_header,
+        dictionaryPageHeader: pageHeader.dictionary_page_header,
+        dataPageHeaderV2: pageHeader.data_page_header_v2,
       })
 
-      // Break after first page for safety (full implementation would continue)
-      break
+      // Move to the next page
+      // The compressed page data immediately follows the header
+      // reader.offset is relative to the DataView starting at bufferOffset
+      bufferOffset = bufferOffset + reader.offset + pageHeader.compressed_page_size
     }
   } catch (e) {
-    console.warn('Failed to parse page data:', e)
+    console.warn(`Failed to parse page data: ${columnChunkMetadata.meta_data.path_in_schema.join('.')} page ${pageNumber}`, e)
   }
 
-  // If we couldn't parse pages directly, fall back to offset index if available
-  if (pages.length === 0 && columnChunkMetadata.offset_index_offset !== undefined) {
-    const offsetIndexStart = Number(columnChunkMetadata.offset_index_offset)
-    const offsetIndexLength = columnChunkMetadata.offset_index_length
-
-    const offsetIndexBuffer = await readByteRange(offsetIndexStart, offsetIndexLength)
-    const reader = {
-      view: new DataView(offsetIndexBuffer),
-      offset: 0
-    }
-    const offsetIndex = readOffsetIndex(reader)
-
-    return offsetIndex.page_locations.map((loc, i) => ({
-      pageNumber: i,
-      offset: loc.offset,
-      compressedSize: loc.compressed_page_size,
-      uncompressedSize: (loc as any).uncompressed_page_size,
-      firstRowIndex: loc.first_row_index,
-    }))
-  }
+  // We never fall back. If this doesn't work, we fix the page parsing
 
   return pages
+}
+
+/**
+ * Parse a Parquet page header from a Thrift CompactProtocol reader
+ * (Based on hyparquet's parquetHeader function)
+ *
+ * @param reader - Reader with view and offset
+ * @returns Parsed page header with all fields
+ */
+function parquetHeader(reader: { view: DataView; offset: number }) {
+  const header = deserializeTCompactProtocol(reader)
+
+  // Parse parquet header from thrift data
+  const type = PageType[header.field_1 as number]
+  const uncompressed_page_size = header.field_2 as number
+  const compressed_page_size = header.field_3 as number
+  const crc = header.field_4
+
+  const data_page_header = header.field_5 && {
+    num_values: header.field_5.field_1,
+    encoding: Encoding[header.field_5.field_2 as number],
+    definition_level_encoding: Encoding[header.field_5.field_3 as number],
+    repetition_level_encoding: Encoding[header.field_5.field_4 as number],
+    statistics: header.field_5.field_5 && {
+      max: header.field_5.field_5.field_1,
+      min: header.field_5.field_5.field_2,
+      null_count: header.field_5.field_5.field_3,
+      distinct_count: header.field_5.field_5.field_4,
+      max_value: header.field_5.field_5.field_5,
+      min_value: header.field_5.field_5.field_6,
+    },
+  }
+
+  const index_page_header = header.field_6
+
+  const dictionary_page_header = header.field_7 && {
+    num_values: header.field_7.field_1,
+    encoding: Encoding[header.field_7.field_2 as number],
+    is_sorted: header.field_7.field_3,
+  }
+
+  const data_page_header_v2 = header.field_8 && {
+    num_values: header.field_8.field_1,
+    num_nulls: header.field_8.field_2,
+    num_rows: header.field_8.field_3,
+    encoding: Encoding[header.field_8.field_4 as number],
+    definition_levels_byte_length: header.field_8.field_5,
+    repetition_levels_byte_length: header.field_8.field_6,
+    is_compressed: header.field_8.field_7 === undefined ? true : header.field_8.field_7,
+    statistics: header.field_8.field_8,
+  }
+
+  return {
+    type,
+    uncompressed_page_size,
+    compressed_page_size,
+    crc,
+    data_page_header,
+    index_page_header,
+    dictionary_page_header,
+    data_page_header_v2,
+  }
 }

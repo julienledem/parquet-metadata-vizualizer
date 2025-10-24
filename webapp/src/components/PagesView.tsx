@@ -1,18 +1,52 @@
-import { useState } from 'react'
-import type { ParquetPageMetadata } from '../../../src/lib/parquet-parsing'
+import { useState, useEffect } from 'react'
+import type { ParquetPageMetadata, PageInfo } from '../../../src/lib/parquet-parsing'
+import { parseParquetPage } from '../../../src/lib/parquet-parsing'
 import './PagesView.css'
 
 interface PagesViewProps {
   metadata: ParquetPageMetadata
+  file: File
 }
 
-function PagesView({ metadata }: PagesViewProps) {
+function PagesView({ metadata, file }: PagesViewProps) {
   const { rowGroups } = metadata
   const [selectedRowGroup, setSelectedRowGroup] = useState<number>(0)
   const [selectedColumn, setSelectedColumn] = useState<number>(0)
+  const [pages, setPages] = useState<PageInfo[]>([])
+  const [isLoadingPages, setIsLoadingPages] = useState(false)
 
   const currentRowGroup = rowGroups[selectedRowGroup]
   const currentColumn = currentRowGroup?.columns[selectedColumn]
+
+  // Load pages dynamically when column selection changes
+  useEffect(() => {
+    if (!currentColumn) return
+
+    const loadPages = async () => {
+      setIsLoadingPages(true)
+      try {
+        // Get the raw column chunk from metadata
+        const rawColumnChunk = metadata.fileMetadata.rowGroups[selectedRowGroup].columns[selectedColumn]
+
+        // Create a byte range reader using File.slice
+        const byteRangeReader = async (offset: number, length: number): Promise<ArrayBuffer> => {
+          const slice = file.slice(offset, offset + length)
+          return await slice.arrayBuffer()
+        }
+
+        // Parse actual page headers
+        const parsedPages = await parseParquetPage(rawColumnChunk, byteRangeReader)
+        setPages(parsedPages)
+      } catch (error) {
+        console.error('Error loading pages:', error)
+        setPages([])
+      } finally {
+        setIsLoadingPages(false)
+      }
+    }
+
+    loadPages()
+  }, [selectedRowGroup, selectedColumn, currentColumn, metadata.fileMetadata, file])
 
   return (
     <div className="pages-view">
@@ -78,7 +112,9 @@ function PagesView({ metadata }: PagesViewProps) {
                 </div>
                 <div className="summary-item">
                   <span className="summary-label">Total Pages:</span>
-                  <span className="summary-value">{currentColumn.numPages}</span>
+                  <span className="summary-value">
+                    {isLoadingPages ? 'Loading...' : pages.length}
+                  </span>
                 </div>
                 <div className="summary-item">
                   <span className="summary-label">Total Values:</span>
@@ -119,12 +155,12 @@ function PagesView({ metadata }: PagesViewProps) {
             </section>
           )}
 
-          {currentColumn.pages.length > 0 && (
+          {!isLoadingPages && pages.length > 0 && (
             <section className="pages-section">
               <h3>Page Statistics Summary</h3>
               {(() => {
                 // Calculate statistics grouped by page type
-                const statsByType = currentColumn.pages.reduce((acc, page) => {
+                const statsByType = pages.reduce((acc, page) => {
                   const type = page.pageType || 'UNKNOWN'
                   if (!acc[type]) {
                     acc[type] = {
@@ -135,6 +171,8 @@ function PagesView({ metadata }: PagesViewProps) {
                       maxCompressedSize: -Infinity,
                       minUncompressedSize: Infinity,
                       maxUncompressedSize: -Infinity,
+                      totalNumValues: 0,
+                      pagesWithNumValues: 0,
                       pages: []
                     }
                   }
@@ -149,6 +187,10 @@ function PagesView({ metadata }: PagesViewProps) {
                     acc[type].minUncompressedSize = Math.min(acc[type].minUncompressedSize, page.uncompressedSize)
                     acc[type].maxUncompressedSize = Math.max(acc[type].maxUncompressedSize, page.uncompressedSize)
                   }
+                  if (page.numValues !== undefined) {
+                    acc[type].totalNumValues += page.numValues
+                    acc[type].pagesWithNumValues++
+                  }
                   acc[type].pages.push(page)
                   return acc
                 }, {} as Record<string, {
@@ -159,7 +201,9 @@ function PagesView({ metadata }: PagesViewProps) {
                   maxCompressedSize: number
                   minUncompressedSize: number
                   maxUncompressedSize: number
-                  pages: typeof currentColumn.pages
+                  totalNumValues: number
+                  pagesWithNumValues: number
+                  pages: PageInfo[]
                 }>)
 
                 return (
@@ -169,19 +213,10 @@ function PagesView({ metadata }: PagesViewProps) {
                       const avgUncompressed = stats.count > 0 ? stats.totalUncompressedSize / stats.count : 0
                       const avgCompressionRatio = avgCompressed > 0 ? avgUncompressed / avgCompressed : 0
 
-                      // Calculate values per page if we have row information
-                      const pagesWithRows = stats.pages.filter(p => p.firstRowIndex !== undefined)
-                      let avgValuesPerPage = 0
-                      if (pagesWithRows.length > 1) {
-                        const rowDiffs = []
-                        for (let i = 1; i < pagesWithRows.length; i++) {
-                          const diff = Number(pagesWithRows[i].firstRowIndex!) - Number(pagesWithRows[i-1].firstRowIndex!)
-                          if (diff > 0) rowDiffs.push(diff)
-                        }
-                        if (rowDiffs.length > 0) {
-                          avgValuesPerPage = rowDiffs.reduce((a, b) => a + b, 0) / rowDiffs.length
-                        }
-                      }
+                      // Calculate average values per page from numValues field
+                      const avgValuesPerPage = stats.pagesWithNumValues > 0
+                        ? stats.totalNumValues / stats.pagesWithNumValues
+                        : 0
 
                       return (
                         <div key={pageType} className="page-stat-card">
@@ -251,35 +286,26 @@ function PagesView({ metadata }: PagesViewProps) {
 
           <section className="pages-section">
             <h3>Page Size Histogram</h3>
-            {currentColumn.pages.length > 0 && currentColumn.pages.some(p => p.compressedSize || p.uncompressedSize) ? (
+            {isLoadingPages ? (
+              <p className="no-pages">Loading page data...</p>
+            ) : pages.length > 0 && pages.some(p => p.compressedSize || p.uncompressedSize) ? (
               <>
                 <div className="histogram-legend">
-                  <div className="legend-item">
-                    <div className="legend-color compressed"></div>
-                    <span>Compressed Size</span>
-                  </div>
-                  <div className="legend-item">
-                    <div className="legend-color uncompressed"></div>
-                    <span>Uncompressed Size</span>
-                  </div>
-                  <div className="legend-divider"></div>
-                  <div className="legend-item">
-                    <div className="legend-color data-page-color"></div>
-                    <span>Data Page</span>
-                  </div>
-                  <div className="legend-item">
-                    <div className="legend-color dictionary-page-color"></div>
-                    <span>Dictionary Page</span>
-                  </div>
-                  <div className="legend-item">
-                    <div className="legend-color unknown-page-color"></div>
-                    <span>Unknown Type</span>
-                  </div>
+                  {(() => {
+                    // Get unique encodings from pages
+                    const encodings = new Set(pages.map(p => p.encoding).filter(Boolean))
+                    return Array.from(encodings).sort().map(encoding => (
+                      <div key={encoding} className="legend-item">
+                        <div className={`legend-color encoding-${encoding?.toLowerCase().replace(/_/g, '-')}`}></div>
+                        <span>{encoding}</span>
+                      </div>
+                    ))
+                  })()}
                 </div>
                 <div className="histogram-container">
                   {(() => {
                     // Filter pages with size information
-                    const pagesWithSizes = currentColumn.pages.filter(p => p.compressedSize || p.uncompressedSize)
+                    const pagesWithSizes = pages.filter(p => p.compressedSize || p.uncompressedSize)
 
                     // Find max size for scaling
                     const maxSize = Math.max(
@@ -289,19 +315,19 @@ function PagesView({ metadata }: PagesViewProps) {
                     return (
                       <div className="histogram">
                         {pagesWithSizes.map((page, idx) => {
-                          const pageType = (page.pageType || 'UNKNOWN').toLowerCase().replace('_', '-')
+                          const encoding = (page.encoding || 'unknown').toLowerCase().replace(/_/g, '-')
                           const compressedHeight = page.compressedSize ? (page.compressedSize / maxSize) * 100 : 0
                           const uncompressedHeight = page.uncompressedSize ? (page.uncompressedSize / maxSize) * 100 : 0
 
                           return (
-                            <div key={idx} className="histogram-bar-group" title={`Page ${page.pageNumber}: ${page.pageType || 'UNKNOWN'}`}>
+                            <div key={idx} className="histogram-bar-group" title={`Page ${page.pageNumber}: ${page.pageType || 'UNKNOWN'} - ${page.encoding || 'Unknown Encoding'}`}>
                               <div className="histogram-bars">
                                 {/* Uncompressed bar (background) */}
                                 {page.uncompressedSize && (
                                   <div
-                                    className={`histogram-bar uncompressed ${pageType}`}
+                                    className={`histogram-bar uncompressed encoding-${encoding}`}
                                     style={{ height: `${uncompressedHeight}%` }}
-                                    title={`Uncompressed: ${page.uncompressedSize.toLocaleString()} bytes\nCompressed: ${page.compressedSize?.toLocaleString() || 'N/A'} bytes`}
+                                    title={`Uncompressed: ${page.uncompressedSize.toLocaleString()} bytes\nCompressed: ${page.compressedSize?.toLocaleString() || 'N/A'} bytes\nEncoding: ${page.encoding || 'Unknown'}\nType: ${page.pageType || 'Unknown'}`}
                                   >
                                     <span className="bar-label bar-label-uncompressed">{(page.uncompressedSize / 1024).toFixed(1)}K</span>
                                   </div>
@@ -309,15 +335,26 @@ function PagesView({ metadata }: PagesViewProps) {
                                 {/* Compressed bar (foreground) */}
                                 {page.compressedSize && (
                                   <div
-                                    className={`histogram-bar compressed ${pageType}`}
+                                    className={`histogram-bar compressed encoding-${encoding}`}
                                     style={{ height: `${compressedHeight}%` }}
-                                    title={`Compressed: ${page.compressedSize.toLocaleString()} bytes\nUncompressed: ${page.uncompressedSize?.toLocaleString() || 'N/A'} bytes`}
+                                    title={`Compressed: ${page.compressedSize.toLocaleString()} bytes\nUncompressed: ${page.uncompressedSize?.toLocaleString() || 'N/A'} bytes\nEncoding: ${page.encoding || 'Unknown'}\nType: ${page.pageType || 'Unknown'}`}
                                   >
                                     <span className="bar-label bar-label-compressed">{(page.compressedSize / 1024).toFixed(1)}K</span>
                                   </div>
                                 )}
                               </div>
-                              <div className="histogram-label">P{page.pageNumber}</div>
+                              <div className="histogram-labels">
+                                <div className="histogram-label">P{page.pageNumber}</div>
+                                {page.pageType === 'DICTIONARY_PAGE' ? (
+                                  <div className="histogram-label-dict">DIC</div>
+                                ) : page.pageType === 'DATA_PAGE' ? (
+                                  <div className="histogram-label-data">DV1</div>
+                                ) : page.pageType === 'DATA_PAGE_V2' ? (
+                                  <div className="histogram-label-data">DV2</div>
+                                ) : (
+                                  <div className="histogram-label-dict histogram-label-placeholder"></div>
+                                )}
+                              </div>
                             </div>
                           )
                         })}
@@ -326,7 +363,7 @@ function PagesView({ metadata }: PagesViewProps) {
                   })()}
                 </div>
                 <div className="histogram-info">
-                  <p>Showing {currentColumn.pages.filter(p => p.compressedSize || p.uncompressedSize).length} pages with size information</p>
+                  <p>Showing {pages.filter(p => p.compressedSize || p.uncompressedSize).length} pages with size information</p>
                 </div>
               </>
             ) : (
