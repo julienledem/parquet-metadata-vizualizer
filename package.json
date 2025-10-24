@@ -1,0 +1,20 @@
+{
+  "name": "claude-parquet-visualizer-v2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "TMPDIR=/tmp vitest run",
+    "test:watch": "TMPDIR=/tmp vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^24.8.0",
+    "hyparquet": "^1.20.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

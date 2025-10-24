@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+webapp/node_modules/
+
+# Build outputs
+dist/
+webapp/dist/
+*.js
+*.js.map
+!vite.config.js
+!vitest.config.js
+
+# Test parquet files (optional - keep them if you want to version them)
+# *.parquet
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Temp files
+tmp/
+temp/

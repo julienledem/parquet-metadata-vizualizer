@@ -1,0 +1,68 @@
+.info-view {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.info-section {
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.info-section h2 {
+  margin: 0 0 1.25rem 0;
+  color: #333;
+  font-size: 1.25rem;
+  border-bottom: 2px solid #646cff;
+  padding-bottom: 0.5rem;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  transition: box-shadow 0.2s ease;
+}
+
+.info-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.info-label {
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.info-value {
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.info-value.highlight {
+  color: #646cff;
+  font-size: 1.5rem;
+}
+
+.info-subvalue {
+  color: #888;
+  font-size: 0.85rem;
+  font-weight: 400;
+}

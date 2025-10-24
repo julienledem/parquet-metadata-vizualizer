@@ -1,0 +1,117 @@
+* {
+  box-sizing: border-box;
+}
+
+#root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #fafafa;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  color: white;
+  padding: 1.5rem 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.app-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.file-name {
+  margin: 0;
+  font-size: 0.95rem;
+  opacity: 0.95;
+  font-weight: 400;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  background-color: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tabs button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  background-color: transparent;
+  color: #666;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  flex: 1;
+  min-width: 120px;
+}
+
+.tabs button:hover {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.tabs button.active {
+  background-color: #646cff;
+  color: white;
+}
+
+.tabs button.reset-button {
+  background-color: #f44336;
+  color: white;
+  margin-left: auto;
+}
+
+.tabs button.reset-button:hover {
+  background-color: #d32f2f;
+}
+
+.tab-content {
+  flex: 1;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .app-main {
+    padding: 1rem;
+  }
+
+  .tabs {
+    flex-direction: column;
+  }
+
+  .tabs button {
+    width: 100%;
+  }
+
+  .tabs button.reset-button {
+    margin-left: 0;
+  }
+}

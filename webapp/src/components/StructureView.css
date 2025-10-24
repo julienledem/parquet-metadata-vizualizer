@@ -1,0 +1,125 @@
+.structure-view {
+  padding: 1.5rem;
+}
+
+.structure-header {
+  margin-bottom: 2rem;
+}
+
+.structure-header h2 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+}
+
+.structure-description {
+  color: #666;
+  margin: 0;
+}
+
+.structure-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  background-color: #fafafa;
+}
+
+.structure-section {
+  border-radius: 6px;
+  padding: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.structure-section.header {
+  background-color: #e3f2fd;
+  border-left: 4px solid #2196f3;
+}
+
+.structure-section.rowgroup {
+  background-color: #f3e5f5;
+  border-left: 4px solid #9c27b0;
+}
+
+.structure-section.column {
+  background-color: #fff3e0;
+  border-left: 4px solid #ff9800;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.structure-section.footer {
+  background-color: #e8f5e9;
+  border-left: 4px solid #4caf50;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.section-header.child {
+  font-size: 0.9rem;
+}
+
+.section-label {
+  font-weight: 500;
+  color: #333;
+}
+
+.section-offset {
+  color: #666;
+  font-size: 0.85rem;
+  font-family: 'Courier New', monospace;
+}
+
+.section-children {
+  margin-top: 0.75rem;
+  margin-left: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-left: 2px dashed #ccc;
+  padding-left: 1rem;
+}
+
+.structure-summary {
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.structure-summary h3 {
+  margin: 0 0 1rem 0;
+  color: #333;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.summary-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.summary-value {
+  color: #333;
+  font-weight: 600;
+}
