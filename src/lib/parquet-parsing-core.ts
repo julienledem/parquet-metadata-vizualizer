@@ -202,11 +202,28 @@ export async function parseParquetPages(
             const offsetIndexStart = Number(columnChunk.offset_index_offset)
             const offsetIndexLength = columnChunk.offset_index_length
 
+            // Calculate the minimum page offset to determine buffer positioning
+            const pageOffsets = [
+              colMeta.data_page_offset,
+              colMeta.dictionary_page_offset,
+              colMeta.index_page_offset
+            ].filter((offset): offset is bigint => offset !== undefined)
+
+            const firstPageOffset = pageOffsets.length > 0
+              ? Number(pageOffsets.reduce((min, curr) => curr < min ? curr : min))
+              : 0
+
             // Read offset index from file
             const offsetIndexBuffer = await readByteRange(offsetIndexStart, offsetIndexLength)
+
+            // Calculate reader offset if offset index is before the first page data
+            const readerOffset = firstPageOffset > offsetIndexStart
+              ? firstPageOffset - offsetIndexStart
+              : 0
+
             const reader = {
               view: new DataView(offsetIndexBuffer),
-              offset: 0
+              offset: readerOffset
             }
             const offsetIndex = readOffsetIndex(reader)
 
@@ -226,28 +243,6 @@ export async function parseParquetPages(
           } catch (e) {
             console.warn(`Failed to read offset index for column ${colIndex}:`, e)
           }
-        }
-
-        // Fallback: use encoding stats if available
-        if (pages.length === 0 && colMeta.encoding_stats && colMeta.encoding_stats.length > 0) {
-          let pageNumber = 0
-          colMeta.encoding_stats.forEach((stat: any) => {
-            for (let i = 0; i < stat.count; i++) {
-              pages.push({
-                pageNumber: pageNumber++,
-                pageType: stat.page_type,
-                encoding: stat.encoding,
-              })
-            }
-          })
-        }
-
-        // Final fallback
-        if (pages.length === 0) {
-          pages.push({
-            pageNumber: 0,
-            pageType: 'DATA_PAGE',
-          })
         }
 
         const numPages = pages.length
