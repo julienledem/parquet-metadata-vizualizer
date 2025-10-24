@@ -1,1 +1,1 @@
-{"version":"3.2.4","results":[[":tests/parquet-footer.test.ts",{"duration":10569.082375,"failed":false}],[":tests/parquet-pages.test.ts",{"duration":12338.326125,"failed":false}]]}
+{"version":"3.2.4","results":[[":tests/parquet-footer.test.ts",{"duration":10907.776249999999,"failed":false}],[":tests/parquet-pages.test.ts",{"duration":11849.640417,"failed":false}]]}

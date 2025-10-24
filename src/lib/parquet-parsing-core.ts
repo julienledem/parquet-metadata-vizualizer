@@ -204,10 +204,10 @@ export async function parseParquetPages(
 
             // Calculate the minimum page offset to determine buffer positioning
             const pageOffsets = [
-              colMeta.data_page_offset,
-              colMeta.dictionary_page_offset,
-              colMeta.index_page_offset
-            ].filter((offset): offset is bigint => offset !== undefined)
+                colMeta.data_page_offset,
+                colMeta.dictionary_page_offset,
+                colMeta.index_page_offset
+              ].filter((offset): offset is bigint => offset !== undefined)
 
             const firstPageOffset = pageOffsets.length > 0
               ? Number(pageOffsets.reduce((min, curr) => curr < min ? curr : min))

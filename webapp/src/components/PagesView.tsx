@@ -296,22 +296,24 @@ function PagesView({ metadata }: PagesViewProps) {
                           return (
                             <div key={idx} className="histogram-bar-group" title={`Page ${page.pageNumber}: ${page.pageType || 'UNKNOWN'}`}>
                               <div className="histogram-bars">
-                                {page.compressedSize && (
-                                  <div
-                                    className={`histogram-bar compressed ${pageType}`}
-                                    style={{ height: `${compressedHeight}%` }}
-                                    title={`Compressed: ${page.compressedSize.toLocaleString()} bytes`}
-                                  >
-                                    <span className="bar-label">{(page.compressedSize / 1024).toFixed(1)}K</span>
-                                  </div>
-                                )}
+                                {/* Uncompressed bar (background) */}
                                 {page.uncompressedSize && (
                                   <div
                                     className={`histogram-bar uncompressed ${pageType}`}
                                     style={{ height: `${uncompressedHeight}%` }}
-                                    title={`Uncompressed: ${page.uncompressedSize.toLocaleString()} bytes`}
+                                    title={`Uncompressed: ${page.uncompressedSize.toLocaleString()} bytes\nCompressed: ${page.compressedSize?.toLocaleString() || 'N/A'} bytes`}
                                   >
-                                    <span className="bar-label">{(page.uncompressedSize / 1024).toFixed(1)}K</span>
+                                    <span className="bar-label bar-label-uncompressed">{(page.uncompressedSize / 1024).toFixed(1)}K</span>
+                                  </div>
+                                )}
+                                {/* Compressed bar (foreground) */}
+                                {page.compressedSize && (
+                                  <div
+                                    className={`histogram-bar compressed ${pageType}`}
+                                    style={{ height: `${compressedHeight}%` }}
+                                    title={`Compressed: ${page.compressedSize.toLocaleString()} bytes\nUncompressed: ${page.uncompressedSize?.toLocaleString() || 'N/A'} bytes`}
+                                  >
+                                    <span className="bar-label bar-label-compressed">{(page.compressedSize / 1024).toFixed(1)}K</span>
                                   </div>
                                 )}
                               </div>
