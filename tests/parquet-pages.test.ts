@@ -17,10 +17,10 @@ describe('Parquet Page-Level Metadata', () => {
   parquetFiles.forEach(filename => {
     describe(`File: ${filename}`, () => {
       const filePath = join(projectRoot, filename)
-      let pageMetadata: ReturnType<typeof readParquetPagesFromFile>
+      let pageMetadata: Awaited<ReturnType<typeof readParquetPagesFromFile>>
 
-      it('should read metadata for page analysis', { timeout: 60000 }, () => {
-        pageMetadata = readParquetPagesFromFile(filePath)
+      it('should read metadata for page analysis', { timeout: 60000 }, async () => {
+        pageMetadata = await readParquetPagesFromFile(filePath)
 
         expect(pageMetadata).toBeDefined()
         expect(pageMetadata.fileMetadata).toBeDefined()
