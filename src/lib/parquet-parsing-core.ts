@@ -138,11 +138,13 @@ export function parseParquetFooter(footerBuffer: ArrayBuffer): ParquetFileMetada
  *
  * @param footerBuffer - ArrayBuffer containing the footer
  * @param readByteRange - Function to read arbitrary byte ranges (for offset indexes)
+ * @param footerLength - Optional footer length in bytes (including trailing 8 bytes)
  * @returns Complete page-level metadata
  */
 export async function parseParquetPages(
   footerBuffer: ArrayBuffer,
-  readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>
+  readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>,
+  footerLength?: number
 ): Promise<ParquetPageMetadata> {
   const metadata = parquetMetadata(footerBuffer)
 
@@ -156,6 +158,7 @@ export async function parseParquetPages(
     schema: metadata.schema,
     rowGroups: metadata.row_groups,
     keyValueMetadata: metadata.key_value_metadata,
+    footerLength,
   }
 
   // Aggregate statistics

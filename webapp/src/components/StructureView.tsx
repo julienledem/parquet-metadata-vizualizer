@@ -75,7 +75,7 @@ function StructureView({ metadata }: StructureViewProps) {
 
     // Footer (exact size from metadata)
     const footerStart = currentOffset
-    const footerSize = fileMetadata.footerLength || 1000 // Use actual size or fallback to approximate
+    const footerSize = fileMetadata.footerLength || 0 // Use actual size from metadata
     layout.push({
       type: 'footer',
       label: `Footer (Metadata + PAR1 Magic Number)`,

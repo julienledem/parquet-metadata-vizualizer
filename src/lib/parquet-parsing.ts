@@ -22,9 +22,9 @@ import type {
  * Read footer buffer from a browser File object
  *
  * @param file - File object from browser
- * @returns Footer buffer
+ * @returns Footer buffer and total footer length
  */
-async function readFooterBuffer(file: File): Promise<ArrayBuffer> {
+async function readFooterBuffer(file: File): Promise<{ footerBuffer: ArrayBuffer; footerLength: number }> {
   console.log('[parquet-parsing] Reading footer from file (browser)')
 
   // Read last 8 bytes to get footer size
@@ -42,7 +42,10 @@ async function readFooterBuffer(file: File): Promise<ArrayBuffer> {
 
   console.log('[parquet-parsing] Footer read successfully')
 
-  return footerBuffer
+  return {
+    footerBuffer,
+    footerLength: footerLength + 8 // Include the trailing 8 bytes
+  }
 }
 
 /**
@@ -52,8 +55,8 @@ async function readFooterBuffer(file: File): Promise<ArrayBuffer> {
  * @returns Complete page-level metadata including footer and page information
  */
 export async function readParquetPagesFromFile(file: File): Promise<ParquetPageMetadata> {
-  // Read footer buffer
-  const footerBuffer = await readFooterBuffer(file)
+  // Read footer buffer and length
+  const { footerBuffer, footerLength } = await readFooterBuffer(file)
 
   console.log('[parquet-parsing] Parsing metadata')
 
@@ -63,8 +66,8 @@ export async function readParquetPagesFromFile(file: File): Promise<ParquetPageM
     return await slice.arrayBuffer()
   }
 
-  // Use core parsing logic
-  const result = await parseParquetPages(footerBuffer, byteRangeReader)
+  // Use core parsing logic with footer length
+  const result = await parseParquetPages(footerBuffer, byteRangeReader, footerLength)
 
   console.log('[parquet-parsing] Processing complete')
 

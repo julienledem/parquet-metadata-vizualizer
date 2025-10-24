@@ -33,9 +33,9 @@ function readByteRange(fd: number, offset: number, length: number): ArrayBuffer 
  * Read footer buffer from a Parquet file
  *
  * @param filePath - Path to the Parquet file
- * @returns Footer buffer and file descriptor for further reading
+ * @returns Footer buffer, footer length, and file descriptor for further reading
  */
-function readFooterBuffer(filePath: string): { footerBuffer: ArrayBuffer; fd: number; fileSize: number } {
+function readFooterBuffer(filePath: string): { footerBuffer: ArrayBuffer; footerLength: number; fd: number; fileSize: number } {
   const fd = openSync(filePath, 'r')
   const fileStats = fstatSync(fd)
   const fileSize = fileStats.size
@@ -54,7 +54,12 @@ function readFooterBuffer(filePath: string): { footerBuffer: ArrayBuffer; fd: nu
     footerBuffer.byteOffset + footerBuffer.byteLength
   )
 
-  return { footerBuffer: arrayBuffer, fd, fileSize }
+  return {
+    footerBuffer: arrayBuffer,
+    footerLength: footerLength + 8, // Include the trailing 8 bytes
+    fd,
+    fileSize
+  }
 }
 
 /**
@@ -79,7 +84,7 @@ export function readParquetFooterFromFile(filePath: string): ParquetFileMetadata
  * @returns Complete page-level metadata including footer and page information
  */
 export async function readParquetPagesFromFile(filePath: string): Promise<ParquetPageMetadata> {
-  const { footerBuffer, fd } = readFooterBuffer(filePath)
+  const { footerBuffer, footerLength, fd } = readFooterBuffer(filePath)
 
   try {
     // Create a byte range reader using the open file descriptor
@@ -87,8 +92,8 @@ export async function readParquetPagesFromFile(filePath: string): Promise<Parque
       return readByteRange(fd, offset, length)
     }
 
-    // Use core parsing logic
-    return await parseParquetPages(footerBuffer, byteRangeReader)
+    // Use core parsing logic with footer length
+    return await parseParquetPages(footerBuffer, byteRangeReader, footerLength)
   } finally {
     closeSync(fd)
   }
