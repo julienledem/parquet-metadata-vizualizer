@@ -4,7 +4,10 @@
  */
 
 import { openSync, readSync, fstatSync, closeSync } from 'fs'
-import { parseParquetFooter, parseParquetPages } from './parquet-parsing-core.js'
+import { parseParquetFooter, parseParquetPageIndex, parseParquetPage } from './parquet-parsing-core.js'
+
+// Re-export core parsing functions
+export { parseParquetPage } from './parquet-parsing-core.js'
 
 // Re-export all types from core
 export type {
@@ -93,7 +96,7 @@ export async function readParquetPagesFromFile(filePath: string): Promise<Parque
     }
 
     // Use core parsing logic with footer length
-    return await parseParquetPages(footerBuffer, byteRangeReader, footerLength)
+    return await parseParquetPageIndex(footerBuffer, byteRangeReader, footerLength)
   } finally {
     closeSync(fd)
   }

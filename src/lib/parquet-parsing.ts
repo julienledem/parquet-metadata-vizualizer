@@ -3,7 +3,10 @@
  * This file contains only I/O operations using browser File API
  */
 
-import { parseParquetPages } from './parquet-parsing-core.js'
+import { parseParquetPageIndex } from './parquet-parsing-core.js'
+
+// Re-export core parsing functions
+export { parseParquetPage } from './parquet-parsing-core.js'
 
 // Re-export all types from core
 export type {
@@ -67,7 +70,7 @@ export async function readParquetPagesFromFile(file: File): Promise<ParquetPageM
   }
 
   // Use core parsing logic with footer length
-  const result = await parseParquetPages(footerBuffer, byteRangeReader, footerLength)
+  const result = await parseParquetPageIndex(footerBuffer, byteRangeReader, footerLength)
 
   console.log('[parquet-parsing] Processing complete')
 
