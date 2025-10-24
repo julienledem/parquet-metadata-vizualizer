@@ -10,8 +10,10 @@ webapp/dist/
 !vite.config.js
 !vitest.config.js
 
-# Test parquet files (optional - keep them if you want to version them)
-# *.parquet
+# Large test parquet files (keep only small test files)
+*.parquet
+!alltypes_dictionary.parquet
+!userdata1.parquet
 
 # IDE
 .vscode/
@@ -37,3 +39,6 @@ npm-debug.log*
 # Temp files
 tmp/
 temp/
+
+# Test cache
+.vitest-cache/

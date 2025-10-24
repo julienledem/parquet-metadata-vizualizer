@@ -319,15 +319,63 @@ function PagesView({ metadata, file }: PagesViewProps) {
                           const compressedHeight = page.compressedSize ? (page.compressedSize / maxSize) * 100 : 0
                           const uncompressedHeight = page.uncompressedSize ? (page.uncompressedSize / maxSize) * 100 : 0
 
+                          // Build comprehensive tooltip with statistics
+                          const buildTooltip = () => {
+                            const lines = [
+                              `Page ${page.pageNumber}: ${page.pageType || 'UNKNOWN'}`,
+                              `Encoding: ${page.encoding || 'Unknown'}`,
+                              `Compressed: ${page.compressedSize?.toLocaleString() || 'N/A'} bytes`,
+                              `Uncompressed: ${page.uncompressedSize?.toLocaleString() || 'N/A'} bytes`,
+                            ]
+
+                            // Add numValues
+                            if (page.numValues !== undefined) {
+                              lines.push(`Values: ${page.numValues.toLocaleString()}`)
+                            }
+
+                            // Add statistics from data page header
+                            if (page.dataPageHeader?.statistics) {
+                              const stats = page.dataPageHeader.statistics
+                              if (stats.null_count !== undefined) {
+                                lines.push(`Nulls: ${stats.null_count}`)
+                              }
+                              if (stats.distinct_count !== undefined) {
+                                lines.push(`Distinct: ${stats.distinct_count}`)
+                              }
+                              if (stats.min !== undefined || stats.min_value !== undefined) {
+                                const minVal = stats.min_value !== undefined ? stats.min_value : stats.min
+                                lines.push(`Min: ${minVal}`)
+                              }
+                              if (stats.max !== undefined || stats.max_value !== undefined) {
+                                const maxVal = stats.max_value !== undefined ? stats.max_value : stats.max
+                                lines.push(`Max: ${maxVal}`)
+                              }
+                            }
+
+                            // Add statistics from data page header v2
+                            if (page.dataPageHeaderV2) {
+                              if (page.dataPageHeaderV2.num_nulls !== undefined) {
+                                lines.push(`Nulls: ${page.dataPageHeaderV2.num_nulls}`)
+                              }
+                              if (page.dataPageHeaderV2.num_rows !== undefined) {
+                                lines.push(`Rows: ${page.dataPageHeaderV2.num_rows}`)
+                              }
+                            }
+
+                            return lines.join('\n')
+                          }
+
+                          const tooltip = buildTooltip()
+
                           return (
-                            <div key={idx} className="histogram-bar-group" title={`Page ${page.pageNumber}: ${page.pageType || 'UNKNOWN'} - ${page.encoding || 'Unknown Encoding'}`}>
+                            <div key={idx} className="histogram-bar-group" title={tooltip}>
                               <div className="histogram-bars">
                                 {/* Uncompressed bar (background) */}
                                 {page.uncompressedSize && (
                                   <div
                                     className={`histogram-bar uncompressed encoding-${encoding}`}
                                     style={{ height: `${uncompressedHeight}%` }}
-                                    title={`Uncompressed: ${page.uncompressedSize.toLocaleString()} bytes\nCompressed: ${page.compressedSize?.toLocaleString() || 'N/A'} bytes\nEncoding: ${page.encoding || 'Unknown'}\nType: ${page.pageType || 'Unknown'}`}
+                                    title={tooltip}
                                   >
                                     <span className="bar-label bar-label-uncompressed">{(page.uncompressedSize / 1024).toFixed(1)}K</span>
                                   </div>
@@ -337,7 +385,7 @@ function PagesView({ metadata, file }: PagesViewProps) {
                                   <div
                                     className={`histogram-bar compressed encoding-${encoding}`}
                                     style={{ height: `${compressedHeight}%` }}
-                                    title={`Compressed: ${page.compressedSize.toLocaleString()} bytes\nUncompressed: ${page.uncompressedSize?.toLocaleString() || 'N/A'} bytes\nEncoding: ${page.encoding || 'Unknown'}\nType: ${page.pageType || 'Unknown'}`}
+                                    title={tooltip}
                                   >
                                     <span className="bar-label bar-label-compressed">{(page.compressedSize / 1024).toFixed(1)}K</span>
                                   </div>
