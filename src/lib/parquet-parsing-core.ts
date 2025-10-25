@@ -76,7 +76,6 @@ export interface ColumnChunkMetadata {
   columnName: string
   physicalType: string
   compressionCodec: string
-  numPages: number | string
   totalValues: bigint
   totalCompressedSize: bigint
   totalUncompressedSize: bigint
@@ -108,7 +107,6 @@ export interface ColumnChunkMetadata {
     length: number
   }
   keyValueMetadata?: Array<{ key: string; value?: string }>
-  pages: PageInfo[]
 }
 
 /**
@@ -230,10 +228,6 @@ export async function parseParquetPageIndex(
           throw new Error(`Missing metadata for column ${colIndex} in row group ${rgIndex}`)
         }
 
-        // Pages will be read on-demand using parseParquetPage, not from page index
-        const pages: PageInfo[] = []
-        const numPages = 0
-
         // Update aggregate stats
         aggregateStats.totalColumnChunks++
         aggregateStats.totalCompressedBytes += colMeta.total_compressed_size
@@ -255,13 +249,11 @@ export async function parseParquetPageIndex(
           aggregateStats.columnsWithOffsetIndex++
         }
 
-        // Count pages
+        // Count pages from encoding stats if available
         if (colMeta.encoding_stats && colMeta.encoding_stats.length > 0) {
           colMeta.encoding_stats.forEach((stat: any) => {
             aggregateStats.totalPages += stat.count
           })
-        } else {
-          aggregateStats.totalPages += numPages
         }
 
         // Calculate compression ratio
@@ -275,14 +267,12 @@ export async function parseParquetPageIndex(
           columnName: colMeta.path_in_schema.join('.'),
           physicalType: colMeta.type,
           compressionCodec: colMeta.codec,
-          numPages,
           totalValues: colMeta.num_values,
           totalCompressedSize: colMeta.total_compressed_size,
           totalUncompressedSize: colMeta.total_uncompressed_size,
           compressionRatio: compressionRatio > 0 ? Number(compressionRatio.toFixed(2)) : 'N/A',
           encodings: colMeta.encodings,
           dataPageOffset: colMeta.data_page_offset,
-          pages,
         }
 
         // Add optional fields

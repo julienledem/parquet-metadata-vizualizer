@@ -140,10 +140,6 @@ function SchemaView({ metadata }: SchemaViewProps) {
                       <span className="detail-label">Compression Ratio:</span>
                       <span className="detail-value">{col.compressionRatio}x</span>
                     </div>
-                    <div className="column-detail-item">
-                      <span className="detail-label">Pages:</span>
-                      <span className="detail-value">{col.numPages}</span>
-                    </div>
                     {col.dictionaryPageOffset !== undefined && (
                       <div className="column-detail-item">
                         <span className="detail-label">Dictionary Page:</span>

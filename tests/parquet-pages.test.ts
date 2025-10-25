@@ -76,13 +76,11 @@ describe('Parquet Page-Level Metadata', () => {
           if (isLargeFile) {
             // Process columns in streaming fashion without detailed output
             rowGroup.columns.forEach((column) => {
-              // Just count pages without logging details
+              // Just count pages from encoding stats
               if (column.encodingStats && column.encodingStats.length > 0) {
                 column.encodingStats.forEach((stat) => {
                   totalPages += stat.count
                 })
-              } else if (typeof column.numPages === 'number') {
-                totalPages += column.numPages
               }
             })
 
@@ -91,7 +89,7 @@ describe('Parquet Page-Level Metadata', () => {
             // Show only first 10 columns in summary
             rowGroup.columns.slice(0, 10).forEach((column) => {
               console.log(`\n  Column ${column.columnIndex}: ${column.columnName}`)
-              console.log(`    Type: ${column.physicalType}, Pages: ${column.numPages}, Codec: ${column.compressionCodec}`)
+              console.log(`    Type: ${column.physicalType}, Codec: ${column.compressionCodec}`)
             })
 
             if (rowGroup.numColumns > 10) {
