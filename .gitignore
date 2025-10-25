@@ -10,10 +10,9 @@ webapp/dist/
 !vite.config.js
 !vitest.config.js
 
-# Large test parquet files (keep only small test files)
+# Test parquet files (keep only small test file)
 *.parquet
 !alltypes_dictionary.parquet
-!userdata1.parquet
 
 # IDE
 .vscode/
