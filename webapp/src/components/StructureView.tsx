@@ -3,9 +3,10 @@ import './StructureView.css'
 
 interface StructureViewProps {
   metadata: ParquetPageMetadata
+  onColumnClick: (rowGroupIndex: number, columnIndex: number) => void
 }
 
-function StructureView({ metadata }: StructureViewProps) {
+function StructureView({ metadata, onColumnClick }: StructureViewProps) {
   const { fileMetadata, rowGroups } = metadata
 
   // Calculate byte positions for visual layout
@@ -15,7 +16,14 @@ function StructureView({ metadata }: StructureViewProps) {
       label: string
       start: number
       size: number
-      children?: Array<{ type: string; label: string; start: number; size: number }>
+      children?: Array<{
+        type: string
+        label: string
+        start: number
+        size: number
+        rowGroupIndex?: number
+        columnIndex?: number
+      }>
     }> = []
 
     // Header (magic number)
@@ -33,7 +41,14 @@ function StructureView({ metadata }: StructureViewProps) {
 
     rowGroups.forEach((rg, rgIndex) => {
       const rgStart = currentOffset
-      const columns: Array<{ type: string; label: string; start: number; size: number }> = []
+      const columns: Array<{
+        type: string
+        label: string
+        start: number
+        size: number
+        rowGroupIndex?: number
+        columnIndex?: number
+      }> = []
 
       // Show details for first MAX_COLUMNS_TO_DISPLAY columns, then summarize
       const columnsToShow = Math.min(rg.columns.length, MAX_COLUMNS_TO_DISPLAY)
@@ -46,6 +61,8 @@ function StructureView({ metadata }: StructureViewProps) {
           label: `Column ${colIndex}: ${col.columnName} (${colSize.toLocaleString()} bytes)`,
           start: currentOffset,
           size: colSize,
+          rowGroupIndex: rgIndex,
+          columnIndex: colIndex,
         })
         currentOffset += colSize
       }
@@ -150,7 +167,16 @@ function StructureView({ metadata }: StructureViewProps) {
             {section.children && section.children.length > 0 && (
               <div className="section-children">
                 {section.children.map((child, childIdx) => (
-                  <div key={childIdx} className={`structure-section ${child.type}`}>
+                  <div
+                    key={childIdx}
+                    className={`structure-section ${child.type} ${child.type === 'column' ? 'clickable' : ''}`}
+                    onClick={() => {
+                      if (child.type === 'column' && child.rowGroupIndex !== undefined && child.columnIndex !== undefined) {
+                        onColumnClick(child.rowGroupIndex, child.columnIndex)
+                      }
+                    }}
+                    style={{ cursor: child.type === 'column' ? 'pointer' : 'default' }}
+                  >
                     <div className="section-header child">
                       <span className="section-label">{child.label}</span>
                       <span className="section-offset">

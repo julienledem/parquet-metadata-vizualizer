@@ -15,12 +15,22 @@ function App() {
   const [fileName, setFileName] = useState<string>('')
   const [file, setFile] = useState<File | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>('structure')
+  const [selectedRowGroup, setSelectedRowGroup] = useState<number | null>(null)
+  const [selectedColumn, setSelectedColumn] = useState<number | null>(null)
 
   const handleFileLoaded = (name: string, meta: ParquetPageMetadata, uploadedFile: File) => {
     setFileName(name)
     setMetadata(meta)
     setFile(uploadedFile)
     setActiveTab('structure')
+    setSelectedRowGroup(null)
+    setSelectedColumn(null)
+  }
+
+  const handleColumnClick = (rowGroupIndex: number, columnIndex: number) => {
+    setSelectedRowGroup(rowGroupIndex)
+    setSelectedColumn(columnIndex)
+    setActiveTab('pages')
   }
 
   return (
@@ -79,10 +89,17 @@ function App() {
             </nav>
 
             <div className="tab-content">
-              {activeTab === 'structure' && <StructureView metadata={metadata} />}
+              {activeTab === 'structure' && <StructureView metadata={metadata} onColumnClick={handleColumnClick} />}
               {activeTab === 'info' && <InfoView metadata={metadata} />}
               {activeTab === 'schema' && <SchemaView metadata={metadata} />}
-              {activeTab === 'pages' && file && <PagesView metadata={metadata} file={file} />}
+              {activeTab === 'pages' && file && (
+                <PagesView
+                  metadata={metadata}
+                  file={file}
+                  initialRowGroup={selectedRowGroup}
+                  initialColumn={selectedColumn}
+                />
+              )}
               {activeTab === 'metadata' && <MetadataView metadata={metadata} />}
             </div>
           </>

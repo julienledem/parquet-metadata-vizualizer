@@ -60,6 +60,17 @@
   border-left: 4px solid #f57c00;
 }
 
+.structure-section.column.clickable {
+  transition: all 0.2s ease;
+}
+
+.structure-section.column.clickable:hover {
+  background-color: #e3f2fd;
+  border-left-color: #1976d2;
+  transform: translateX(2px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 .structure-section.footer {
   background-color: #e8f5e9;
   border-left: 4px solid #4caf50;

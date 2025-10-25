@@ -6,14 +6,26 @@ import './PagesView.css'
 interface PagesViewProps {
   metadata: ParquetPageMetadata
   file: File
+  initialRowGroup?: number | null
+  initialColumn?: number | null
 }
 
-function PagesView({ metadata, file }: PagesViewProps) {
+function PagesView({ metadata, file, initialRowGroup, initialColumn }: PagesViewProps) {
   const { rowGroups } = metadata
-  const [selectedRowGroup, setSelectedRowGroup] = useState<number>(0)
-  const [selectedColumn, setSelectedColumn] = useState<number>(0)
+  const [selectedRowGroup, setSelectedRowGroup] = useState<number>(initialRowGroup ?? 0)
+  const [selectedColumn, setSelectedColumn] = useState<number>(initialColumn ?? 0)
   const [pages, setPages] = useState<PageInfo[]>([])
   const [isLoadingPages, setIsLoadingPages] = useState(false)
+
+  // Update selection when initial values change
+  useEffect(() => {
+    if (initialRowGroup !== null && initialRowGroup !== undefined) {
+      setSelectedRowGroup(initialRowGroup)
+    }
+    if (initialColumn !== null && initialColumn !== undefined) {
+      setSelectedColumn(initialColumn)
+    }
+  }, [initialRowGroup, initialColumn])
 
   const currentRowGroup = rowGroups[selectedRowGroup]
   const currentColumn = currentRowGroup?.columns[selectedColumn]
