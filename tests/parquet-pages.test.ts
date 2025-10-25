@@ -106,7 +106,6 @@ describe('Parquet Page-Level Metadata', () => {
               // Basic column information
               console.log(`    Physical Type: ${column.physicalType}`)
               console.log(`    Compression Codec: ${column.compressionCodec}`)
-              console.log(`    Number of Pages: ${column.numPages}`)
               console.log(`    Total Values: ${column.totalValues.toLocaleString()}`)
               console.log(`    Total Compressed Size: ${column.totalCompressedSize.toLocaleString()} bytes`)
               console.log(`    Total Uncompressed Size: ${column.totalUncompressedSize.toLocaleString()} bytes`)
@@ -132,22 +131,6 @@ describe('Parquet Page-Level Metadata', () => {
                   console.log(`      ${stat.pageType}: ${stat.encoding} (${stat.count} pages)`)
                   totalPages += stat.count
                 })
-              } else if (typeof column.numPages === 'number') {
-                totalPages += column.numPages
-              }
-
-              // Display individual page information if available (limit to first 5 pages)
-              if (column.pages.length > 0 && column.pages[0].offset !== undefined) {
-                console.log(`\n    Individual Page Details (first 5):`)
-                column.pages.slice(0, 5).forEach((page) => {
-                  console.log(`      Page ${page.pageNumber}:`)
-                  console.log(`        Offset: ${page.offset}`)
-                  console.log(`        Compressed Size: ${page.compressedSize?.toLocaleString()} bytes`)
-                  console.log(`        First Row Index: ${page.firstRowIndex}`)
-                })
-                if (column.pages.length > 5) {
-                  console.log(`      ... and ${column.pages.length - 5} more pages`)
-                }
               }
 
               // Column statistics (if available)
@@ -247,17 +230,6 @@ describe('Parquet Page-Level Metadata', () => {
         expect(aggregateStats.totalPages).toBeGreaterThanOrEqual(0)
       })
 
-      it('should not have any pages with UNKNOWN page type', () => {
-        pageMetadata.rowGroups.forEach((rg) => {
-          rg.columns.forEach((col) => {
-            col.pages.forEach((page) => {
-              if (page.pageType !== undefined) {
-                expect(page.pageType).not.toBe('UNKNOWN')
-              }
-            })
-          })
-        })
-      })
     })
   })
 })

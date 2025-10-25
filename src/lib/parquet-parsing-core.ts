@@ -5,7 +5,7 @@
  * Platform-specific I/O (Node.js fs, browser File API) is handled by separate modules.
  */
 
-import { parquetMetadata, readOffsetIndex } from 'hyparquet'
+import { parquetMetadata } from 'hyparquet'
 import { deserializeTCompactProtocol } from 'hyparquet/src/thrift.js'
 import { PageType, Encoding } from 'hyparquet/src/constants.js'
 
@@ -176,7 +176,7 @@ export function parseParquetFooter(footerBuffer: ArrayBuffer): ParquetFileMetada
  */
 export async function parseParquetPageIndex(
   footerBuffer: ArrayBuffer,
-  readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>,
+  _readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>,
   footerLength?: number
 ): Promise<ParquetPageMetadata> {
   const metadata = parquetMetadata(footerBuffer)
@@ -230,53 +230,9 @@ export async function parseParquetPageIndex(
           throw new Error(`Missing metadata for column ${colIndex} in row group ${rgIndex}`)
         }
 
-        // Try to read offset index for page size information
-        let pages: PageInfo[] = []
-
-        if (columnChunk.offset_index_offset !== undefined && columnChunk.offset_index_length) {
-          try {
-            const offsetIndexStart = Number(columnChunk.offset_index_offset)
-            const offsetIndexLength = columnChunk.offset_index_length
-
-            // Calculate the minimum page offset to determine buffer positioning
-            const pageOffsets = [
-                colMeta.data_page_offset,
-                colMeta.dictionary_page_offset,
-                colMeta.index_page_offset
-              ].filter((offset): offset is bigint => offset !== undefined)
-
-            const firstPageOffset = pageOffsets.length > 0
-              ? Number(pageOffsets.reduce((min, curr) => curr < min ? curr : min))
-              : 0
-
-            // Read offset index from file
-            const offsetIndexBuffer = await readByteRange(offsetIndexStart, offsetIndexLength)
-
-            // Calculate reader offset if offset index is before the first page data
-            const readerOffset = firstPageOffset > offsetIndexStart
-              ? firstPageOffset - offsetIndexStart
-              : 0
-
-            const reader = {
-              view: new DataView(offsetIndexBuffer),
-              offset: readerOffset
-            }
-            const offsetIndex = readOffsetIndex(reader)
-
-            // Map page locations to PageInfo with size information
-            pages = offsetIndex.page_locations.map((loc, i) => ({
-              pageNumber: i,
-              offset: loc.offset,
-              compressedSize: loc.compressed_page_size,
-              uncompressedSize: (loc as any).uncompressed_page_size,
-              firstRowIndex: loc.first_row_index,
-            }))
-          } catch (e) {
-            console.warn(`Failed to read offset index for column ${colIndex}:`, e)
-          }
-        }
-
-        const numPages = pages.length
+        // Pages will be read on-demand using parseParquetPage, not from page index
+        const pages: PageInfo[] = []
+        const numPages = 0
 
         // Update aggregate stats
         aggregateStats.totalColumnChunks++
