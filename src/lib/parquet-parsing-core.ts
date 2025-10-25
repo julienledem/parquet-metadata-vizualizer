@@ -34,6 +34,7 @@ export interface PageInfo {
   offset?: bigint
   compressedSize?: number
   uncompressedSize?: number
+  headerSize?: number
   firstRowIndex?: bigint
   numValues?: number
   crc?: number
@@ -373,14 +374,25 @@ export async function parseParquetPage(
   }
 
   // Start reading from the data page offset
+  if (colMeta.data_page_offset > Number.MAX_SAFE_INTEGER) {
+    throw new Error(`Data page offset ${colMeta.data_page_offset} exceeds JavaScript's safe integer limit`)
+  }
   let currentOffset = Number(colMeta.data_page_offset)
 
   // If there's a dictionary page, it comes before data pages
   if (colMeta.dictionary_page_offset !== undefined) {
+    if (colMeta.dictionary_page_offset > Number.MAX_SAFE_INTEGER) {
+      throw new Error(`Dictionary page offset ${colMeta.dictionary_page_offset} exceeds JavaScript's safe integer limit`)
+    }
     currentOffset = Math.min(currentOffset, Number(colMeta.dictionary_page_offset))
   }
 
   let pageNumber = 0
+  // Convert bigint to number - JavaScript number can safely represent integers up to 2^53-1 (~8 PB)
+  // This is well above practical parquet column chunk sizes
+  if (colMeta.total_compressed_size > Number.MAX_SAFE_INTEGER) {
+    throw new Error(`Column chunk size ${colMeta.total_compressed_size} exceeds JavaScript's safe integer limit`)
+  }
   const totalCompressedSize = Number(colMeta.total_compressed_size)
   const endOffset = currentOffset + totalCompressedSize
 
@@ -403,6 +415,9 @@ export async function parseParquetPage(
 
       // Parse the PageHeader using hyparquet's parquetHeader logic
       const pageHeader = parquetHeader(reader)
+
+      // Capture the header size (reader.offset now contains bytes read for the header)
+      const headerSize = reader.offset
 
       // Extract encoding for convenience
       let encoding: string | undefined
@@ -430,6 +445,7 @@ export async function parseParquetPage(
         offset: BigInt(pageStartOffset),
         compressedSize: pageHeader.compressed_page_size,
         uncompressedSize: pageHeader.uncompressed_page_size,
+        headerSize: headerSize,
         numValues: numValues,
         crc: pageHeader.crc,
         dataPageHeader: pageHeader.data_page_header,

@@ -434,6 +434,11 @@
   background: linear-gradient(135deg, #757575 0%, #616161 100%);
 }
 
+.legend-color.legend-header {
+  background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%);
+  border-top: 2px solid #616161;
+}
+
 .legend-divider {
   width: 1px;
   height: 20px;
@@ -505,6 +510,14 @@
   width: 30px;
   z-index: 2;
   background: linear-gradient(180deg, #646cff 0%, #535bf2 100%);
+}
+
+/* Header bar - very narrow grey bar at the bottom showing header overhead */
+.histogram-bar.header {
+  width: 50px;
+  z-index: 0;
+  background: linear-gradient(180deg, #9e9e9e 0%, #757575 100%);
+  border-top: 2px solid #616161;
 }
 
 .histogram-bar:hover {
@@ -638,6 +651,14 @@
   opacity: 1;
 }
 
+.bar-label-header {
+  font-size: 0.6rem;
+  color: white;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  writing-mode: horizontal-tb;
+}
+
 .histogram-labels {
   display: flex;
   flex-direction: column;
@@ -695,4 +716,36 @@
 
 .histogram-info p {
   margin: 0;
+}
+
+/* Selected Column Info */
+.selected-column-info {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border: 2px solid #2196f3;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+  color: #1565c0;
+  font-size: 1rem;
+}
+
+.selected-column-info strong {
+  color: #0d47a1;
+}
+
+/* No Column Selected */
+.no-column-selected {
+  background: linear-gradient(135deg, #fff9c4 0%, #fff59d 100%);
+  border: 2px dashed #fbc02d;
+  border-radius: 8px;
+  padding: 2rem;
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.no-column-selected p {
+  margin: 0;
+  color: #f57f17;
+  font-size: 1.1rem;
+  font-weight: 500;
 }
