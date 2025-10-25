@@ -35,7 +35,7 @@ function SchemaView({ metadata }: SchemaViewProps) {
       }
 
       // Get repetition type
-      let repetition = ''
+      let repetition = 'optional' // Default to optional if not specified
       if (element.repetition_type === 0) repetition = 'required'
       else if (element.repetition_type === 1) repetition = 'optional'
       else if (element.repetition_type === 2) repetition = 'repeated'
