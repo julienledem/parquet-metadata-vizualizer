@@ -6,7 +6,13 @@
 import { parseParquetPageIndex } from './parquet-parsing-core.js'
 
 // Re-export core parsing functions
-export { parseParquetPage } from './parquet-parsing-core.js'
+export {
+  parseParquetPage,
+  parsePageDataSizes,
+  parseColumnChunkPageSizes,
+  calculateMaxLevels,
+  decompressPageData
+} from './parquet-parsing-core.js'
 
 // Re-export all types from core
 export type {
@@ -14,7 +20,8 @@ export type {
   PageInfo,
   ColumnChunkMetadata,
   RowGroupMetadata,
-  ParquetPageMetadata
+  ParquetPageMetadata,
+  PageSizeBreakdown
 } from './parquet-parsing-core.js'
 
 import type {

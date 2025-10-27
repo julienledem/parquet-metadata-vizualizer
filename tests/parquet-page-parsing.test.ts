@@ -147,7 +147,7 @@ describe('parseParquetPage', () => {
       // Find a column with ZSTD compression
       const rowGroup = metadata.fileMetadata.rowGroups[0]
       const compressedColumn = rowGroup.columns.find(
-        col => col.meta_data.codec === 'ZSTD'
+        (col: any) => col.meta_data.codec === 'ZSTD'
       )
 
       if (!compressedColumn) {

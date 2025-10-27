@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { ParquetPageMetadata, PageInfo } from '../../../src/lib/parquet-parsing'
-import { parseParquetPage } from '../../../src/lib/parquet-parsing'
+import type { ParquetPageMetadata, PageInfo, PageSizeBreakdown } from '../../../src/lib/parquet-parsing'
+import { parseParquetPage, parsePageDataSizes, calculateMaxLevels, decompressPageData } from '../../../src/lib/parquet-parsing'
 import './PagesView.css'
 
 interface PagesViewProps {
@@ -15,6 +15,7 @@ function PagesView({ metadata, file, initialRowGroup, initialColumn }: PagesView
   const [selectedRowGroup, setSelectedRowGroup] = useState<number>(initialRowGroup ?? 0)
   const [selectedColumn, setSelectedColumn] = useState<number | null>(initialColumn ?? null)
   const [pages, setPages] = useState<PageInfo[]>([])
+  const [pageSizeBreakdowns, setPageSizeBreakdowns] = useState<PageSizeBreakdown[]>([])
   const [isLoadingPages, setIsLoadingPages] = useState(false)
 
   // Update selection when initial values change
@@ -44,9 +45,61 @@ function PagesView({ metadata, file, initialRowGroup, initialColumn }: PagesView
         }
         const parsedPages = await parseParquetPage(rawColumnChunk, byteRangeReader)
         setPages(parsedPages)
+
+        // Calculate max levels for this column
+        const columnPath = rawColumnChunk.meta_data.path_in_schema
+        const { maxRepetitionLevel, maxDefinitionLevel } = calculateMaxLevels(
+          metadata.fileMetadata.schema,
+          columnPath
+        )
+
+        // Get the compression codec for this column
+        const codec = rawColumnChunk.meta_data.codec
+
+        // Parse size breakdowns for each page
+        const breakdowns: PageSizeBreakdown[] = []
+        for (const page of parsedPages) {
+          try {
+            const pageOffset = Number(page.offset)
+            const headerSize = page.headerSize || 0
+            const compressedSize = page.compressedSize || 0
+            const uncompressedSize = page.uncompressedSize || compressedSize
+
+            // Read the compressed page data (after header)
+            const compressedData = await byteRangeReader(pageOffset + headerSize, compressedSize)
+
+            // Decompress the page data
+            // For DATA_PAGE_V2, check the is_compressed flag
+            let uncompressedBytes: Uint8Array
+            if (page.dataPageHeaderV2 && page.dataPageHeaderV2.is_compressed === false) {
+              // Data is already uncompressed
+              uncompressedBytes = new Uint8Array(compressedData)
+            } else {
+              // Normal decompression based on codec
+              uncompressedBytes = decompressPageData(
+                compressedData,
+                uncompressedSize,
+                codec
+              )
+            }
+
+            // Parse the page data sizes
+            const breakdown = parsePageDataSizes(
+              page,
+              uncompressedBytes,
+              maxRepetitionLevel,
+              maxDefinitionLevel
+            )
+            breakdowns.push(breakdown)
+          } catch (error) {
+            console.warn(`Failed to parse size breakdown for page ${page.pageNumber}:`, error)
+          }
+        }
+        setPageSizeBreakdowns(breakdowns)
       } catch (error) {
         console.error('Error loading pages:', error)
         setPages([])
+        setPageSizeBreakdowns([])
       } finally {
         setIsLoadingPages(false)
       }
@@ -328,14 +381,41 @@ function PagesView({ metadata, file, initialRowGroup, initialColumn }: PagesView
                               `Total (Header + Compressed): ${((page.headerSize || 0) + (page.compressedSize || 0)).toLocaleString()} bytes`,
                             ]
 
+                            // Add page size breakdown if available
+                            const breakdown = pageSizeBreakdowns.find(b => b.pageNumber === page.pageNumber)
+                            if (breakdown) {
+                              lines.push('')
+                              lines.push('--- Page Data Breakdown ---')
+                              lines.push(`Repetition Levels: ${breakdown.repetitionLevelsSize.toLocaleString()} bytes`)
+                              lines.push(`Definition Levels: ${breakdown.definitionLevelsSize.toLocaleString()} bytes`)
+                              lines.push(`Values: ${breakdown.valuesSize.toLocaleString()} bytes`)
+
+                              // Calculate percentages
+                              const total = breakdown.totalDataSize
+                              if (total > 0) {
+                                const repPercent = ((breakdown.repetitionLevelsSize / total) * 100).toFixed(1)
+                                const defPercent = ((breakdown.definitionLevelsSize / total) * 100).toFixed(1)
+                                const valPercent = ((breakdown.valuesSize / total) * 100).toFixed(1)
+                                lines.push(`Distribution: Rep ${repPercent}% | Def ${defPercent}% | Val ${valPercent}%`)
+                              }
+
+                              // Add null count if available
+                              if (breakdown.nullCount !== undefined) {
+                                lines.push(`Null Count: ${breakdown.nullCount.toLocaleString()}`)
+                              }
+                            }
+
                             // Add numValues
                             if (page.numValues !== undefined) {
-                              lines.push(`Values: ${page.numValues.toLocaleString()}`)
+                              lines.push(``)
+                              lines.push(`Values Count: ${page.numValues.toLocaleString()}`)
                             }
 
                             // Add statistics from data page header
                             if (page.dataPageHeader?.statistics) {
                               const stats = page.dataPageHeader.statistics
+                              lines.push('')
+                              lines.push('--- Statistics ---')
                               if (stats.null_count !== undefined) {
                                 lines.push(`Nulls: ${stats.null_count}`)
                               }
@@ -354,6 +434,8 @@ function PagesView({ metadata, file, initialRowGroup, initialColumn }: PagesView
 
                             // Add statistics from data page header v2
                             if (page.dataPageHeaderV2) {
+                              lines.push('')
+                              lines.push('--- Statistics (V2) ---')
                               if (page.dataPageHeaderV2.num_nulls !== undefined) {
                                 lines.push(`Nulls: ${page.dataPageHeaderV2.num_nulls}`)
                               }

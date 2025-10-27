@@ -16,5 +16,8 @@
     "hyparquet": "^1.20.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "fzstd": "^0.1.1"
   }
 }

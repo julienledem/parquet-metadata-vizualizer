@@ -5,9 +5,10 @@
  * Platform-specific I/O (Node.js fs, browser File API) is handled by separate modules.
  */
 
-import { parquetMetadata } from 'hyparquet'
+import { parquetMetadata, snappyUncompress } from 'hyparquet'
 import { deserializeTCompactProtocol } from 'hyparquet/src/thrift.js'
 import { PageType, Encoding } from 'hyparquet/src/constants.js'
+import { decompress as zstdDecompress } from 'fzstd'
 
 /**
  * File metadata extracted from the Parquet footer
@@ -67,6 +68,20 @@ export interface PageInfo {
     is_compressed: boolean
     statistics?: any
   }
+}
+
+/**
+ * Size breakdown of a page's components
+ */
+export interface PageSizeBreakdown {
+  pageNumber: number
+  pageType: string
+  headerSize: number
+  repetitionLevelsSize: number
+  definitionLevelsSize: number
+  valuesSize: number
+  totalDataSize: number
+  nullCount?: number
 }
 
 /**
@@ -145,6 +160,34 @@ export interface ParquetPageMetadata {
 }
 
 /**
+ * Count the number of leaf columns in a Parquet schema
+ * Leaf columns are the actual data columns (not intermediate struct/list containers)
+ *
+ * @param schema - Parquet schema array
+ * @returns Number of leaf columns
+ */
+function countLeafColumns(schema: any[]): number {
+  if (!schema || schema.length === 0) return 0
+
+  let leafCount = 0
+
+  for (const element of schema) {
+    // Skip the root element
+    if (!element.name) continue
+
+    // A leaf column is one that has no children
+    // num_children is undefined/null/0 for leaf columns
+    const hasChildren = element.num_children && element.num_children > 0
+
+    if (!hasChildren) {
+      leafCount++
+    }
+  }
+
+  return leafCount
+}
+
+/**
  * Parse Parquet footer metadata from buffer
  *
  * @param footerBuffer - ArrayBuffer containing the footer (including the trailing 8 bytes)
@@ -157,7 +200,7 @@ export function parseParquetFooter(footerBuffer: ArrayBuffer): ParquetFileMetada
     version: metadata.version,
     numRows: metadata.num_rows,
     numRowGroups: metadata.row_groups.length,
-    numColumns: metadata.schema.length - 1, // -1 for root schema element
+    numColumns: countLeafColumns(metadata.schema),
     createdBy: metadata.created_by,
     schema: metadata.schema,
     rowGroups: metadata.row_groups,
@@ -185,7 +228,7 @@ export async function parseParquetPageIndex(
     version: metadata.version,
     numRows: metadata.num_rows,
     numRowGroups: metadata.row_groups.length,
-    numColumns: metadata.schema.length - 1,
+    numColumns: countLeafColumns(metadata.schema),
     createdBy: metadata.created_by,
     schema: metadata.schema,
     rowGroups: metadata.row_groups,
@@ -527,4 +570,454 @@ function parquetHeader(reader: { view: DataView; offset: number }) {
     dictionary_page_header,
     data_page_header_v2,
   }
+}
+
+/**
+ * Read a variable-length integer (varint)
+ * Used in RLE/bit-packed hybrid encoding
+ *
+ * @param view - DataView
+ * @param offset - Current offset (will be modified)
+ * @returns Object with value and new offset
+ */
+function readVarInt(view: DataView, offset: number): { value: number; offset: number } {
+  let value = 0
+  let shift = 0
+  let byte = 0
+
+  do {
+    byte = view.getUint8(offset++)
+    value |= (byte & 0x7f) << shift
+    shift += 7
+  } while (byte & 0x80)
+
+  return { value, offset }
+}
+
+/**
+ * Decode RLE/bit-packed hybrid definition levels
+ * Returns array of definition level values
+ *
+ * @param view - DataView of the page data
+ * @param offset - Starting offset (after length prefix)
+ * @param length - Length of encoded data in bytes
+ * @param bitWidth - Bit width for values
+ * @param numValues - Number of values to decode
+ * @returns Array of definition level values
+ */
+function decodeRleBitPackedLevels(
+  view: DataView,
+  offset: number,
+  length: number,
+  bitWidth: number,
+  numValues: number
+): number[] {
+  const result: number[] = []
+  const endOffset = offset + length
+  let currentOffset = offset
+
+  while (result.length < numValues && currentOffset < endOffset) {
+    // Read header
+    const { value: header, offset: newOffset } = readVarInt(view, currentOffset)
+    currentOffset = newOffset
+
+    if (header & 1) {
+      // Bit-packed run
+      const count = (header >> 1) << 3 // number of values
+      const mask = (1 << bitWidth) - 1
+
+      // Read bit-packed values
+      let data = 0
+      let bitsInData = 0
+
+      for (let i = 0; i < count && result.length < numValues; i++) {
+        // Load more bits if needed
+        while (bitsInData < bitWidth && currentOffset < endOffset) {
+          data |= view.getUint8(currentOffset++) << bitsInData
+          bitsInData += 8
+        }
+
+        // Extract value
+        const value = data & mask
+        result.push(value)
+
+        // Shift out used bits
+        data >>>= bitWidth
+        bitsInData -= bitWidth
+      }
+    } else {
+      // RLE run
+      const count = header >>> 1
+      const byteWidth = Math.ceil(bitWidth / 8)
+
+      // Read value
+      let value = 0
+      for (let i = 0; i < byteWidth && currentOffset < endOffset; i++) {
+        value |= view.getUint8(currentOffset++) << (i * 8)
+      }
+
+      // Repeat value count times
+      for (let i = 0; i < count && result.length < numValues; i++) {
+        result.push(value)
+      }
+    }
+  }
+
+  return result
+}
+
+/**
+ * Count nulls from definition levels
+ * Values with definition level < maxDefinitionLevel are null/missing
+ *
+ * @param definitionLevels - Array of definition level values
+ * @param maxDefinitionLevel - Maximum definition level
+ * @returns Number of null values
+ */
+function countNullsFromDefinitionLevels(
+  definitionLevels: number[],
+  maxDefinitionLevel: number
+): number {
+  let nullCount = 0
+  for (const level of definitionLevels) {
+    if (level < maxDefinitionLevel) {
+      nullCount++
+    }
+  }
+  return nullCount
+}
+
+/**
+ * Read the size of RLE/Bit-packed encoded data
+ * Used for reading repetition and definition levels in Data Page V1
+ *
+ * @param view - DataView of the page data
+ * @param offset - Starting offset
+ * @param maxLevel - Maximum level value (determines bit width)
+ * @param _numValues - Number of values to read (reserved for future use)
+ * @returns Number of bytes consumed
+ */
+function readRleBitPackedLevelSize(
+  view: DataView,
+  offset: number,
+  maxLevel: number,
+  _numValues: number
+): number {
+  if (maxLevel === 0) {
+    // No levels needed
+    return 0
+  }
+
+  // NOTE: For full RLE/bit-packed decoding, we would calculate:
+  // const bitWidth = Math.ceil(Math.log2(maxLevel + 1))
+  // But for size calculation, we only need to read the length prefix
+
+  // First 4 bytes contain the total byte length for levels in Data Page V1
+  // This is a length-prefixed encoding
+  const totalLength = view.getUint32(offset, true) // little-endian
+
+  return 4 + totalLength
+}
+
+/**
+ * Decompress page data based on compression codec
+ *
+ * @param compressedData - Compressed page data
+ * @param uncompressedSize - Expected uncompressed size
+ * @param codec - Compression codec used
+ * @returns Uncompressed data as Uint8Array
+ */
+export function decompressPageData(
+  compressedData: ArrayBuffer,
+  uncompressedSize: number,
+  codec: string
+): Uint8Array {
+  const compressedBytes = new Uint8Array(compressedData)
+
+  // No decompression needed
+  if (codec === 'UNCOMPRESSED') {
+    return compressedBytes
+  }
+
+  // SNAPPY decompression using hyparquet's built-in decompressor
+  if (codec === 'SNAPPY') {
+    const outputBuffer = new Uint8Array(uncompressedSize)
+    snappyUncompress(compressedBytes, outputBuffer)
+    return outputBuffer
+  }
+
+  // ZSTD decompression using fzstd library
+  if (codec === 'ZSTD') {
+    return zstdDecompress(compressedBytes)
+  }
+
+  // For other codecs, we would need additional libraries
+  // For now, throw an error indicating unsupported codec
+  throw new Error(`Decompression for codec ${codec} is not yet supported. Supported codecs: UNCOMPRESSED, SNAPPY, ZSTD`)
+}
+
+/**
+ * Calculate maximum repetition and definition levels for a column from schema
+ *
+ * @param schema - Complete Parquet schema array
+ * @param columnPath - Path to the column (e.g., ['user', 'name'])
+ * @returns Object with maxRepetitionLevel and maxDefinitionLevel
+ */
+export function calculateMaxLevels(
+  schema: any[],
+  columnPath: string[]
+): { maxRepetitionLevel: number; maxDefinitionLevel: number } {
+  let maxRepetitionLevel = 0
+  let maxDefinitionLevel = 0
+
+  // Traverse the schema following the column path
+  let currentPath: string[] = []
+
+  for (let i = 1; i < schema.length; i++) {
+    const schemaElement = schema[i]
+    const elementPath = schemaElement.name ? [...currentPath, schemaElement.name] : currentPath
+
+    // Check if this element is on the path to our column
+    const isOnPath = columnPath.length >= elementPath.length &&
+      columnPath.slice(0, elementPath.length).every((p, idx) => p === elementPath[idx])
+
+    if (isOnPath || elementPath.length === 0) {
+      // Check repetition type
+      if (schemaElement.repetition_type === 'REPEATED') {
+        maxRepetitionLevel++
+      }
+
+      // Check if field is optional (increases definition level)
+      if (schemaElement.repetition_type === 'OPTIONAL') {
+        maxDefinitionLevel++
+      }
+
+      // If field is repeated, it also affects definition level
+      if (schemaElement.repetition_type === 'REPEATED') {
+        maxDefinitionLevel++
+      }
+
+      // If this is our target column, we're done
+      if (elementPath.length === columnPath.length &&
+          elementPath.every((p, idx) => p === columnPath[idx])) {
+        break
+      }
+
+      currentPath = elementPath
+    }
+  }
+
+  return { maxRepetitionLevel, maxDefinitionLevel }
+}
+
+/**
+ * Parse page data and extract size breakdown of components
+ *
+ * This function analyzes the uncompressed page data to determine the size
+ * of repetition levels, definition levels, and values within a page.
+ *
+ * @param pageInfo - Page metadata from parseParquetPage
+ * @param uncompressedPageData - Uncompressed page data (excluding header)
+ * @param maxRepetitionLevel - Maximum repetition level for the column (0 for non-nested)
+ * @param maxDefinitionLevel - Maximum definition level for the column
+ * @returns Size breakdown of page components
+ */
+export function parsePageDataSizes(
+  pageInfo: PageInfo,
+  uncompressedPageData: ArrayBuffer | Uint8Array,
+  maxRepetitionLevel: number,
+  maxDefinitionLevel: number
+): PageSizeBreakdown {
+  // Convert to ArrayBuffer if needed
+  const buffer = uncompressedPageData instanceof Uint8Array
+    ? uncompressedPageData.buffer
+    : uncompressedPageData
+  const byteLength = uncompressedPageData instanceof Uint8Array
+    ? uncompressedPageData.byteLength
+    : uncompressedPageData.byteLength
+  const view = new DataView(buffer)
+  let offset = 0
+
+  let repetitionLevelsSize = 0
+  let definitionLevelsSize = 0
+  let valuesSize = 0
+  let nullCount: number | undefined
+
+  const pageType = pageInfo.pageType || 'UNKNOWN'
+
+  // Handle Data Page V2
+  if (pageInfo.dataPageHeaderV2) {
+    const header = pageInfo.dataPageHeaderV2
+
+    // V2 pages have the byte lengths in the header
+    repetitionLevelsSize = header.repetition_levels_byte_length
+    definitionLevelsSize = header.definition_levels_byte_length
+
+    // Values size is the remaining data
+    valuesSize = byteLength - repetitionLevelsSize - definitionLevelsSize
+
+    // Extract null count from V2 header if available
+    if (header.num_nulls !== undefined && header.num_nulls !== null) {
+      nullCount = header.num_nulls
+    }
+  }
+  // Handle Data Page V1
+  else if (pageInfo.dataPageHeader) {
+    const header = pageInfo.dataPageHeader
+    const numValues = header.num_values
+
+    // Store the start of definition levels for potential decoding
+    let definitionLevelsOffset = offset
+
+    // Read repetition levels (if any)
+    if (maxRepetitionLevel > 0) {
+      repetitionLevelsSize = readRleBitPackedLevelSize(
+        view,
+        offset,
+        maxRepetitionLevel,
+        numValues
+      )
+      offset += repetitionLevelsSize
+      definitionLevelsOffset = offset
+    }
+
+    // Read definition levels (if any)
+    if (maxDefinitionLevel > 0) {
+      definitionLevelsSize = readRleBitPackedLevelSize(
+        view,
+        offset,
+        maxDefinitionLevel,
+        numValues
+      )
+      offset += definitionLevelsSize
+
+      // If definition levels are small (<1kB), decode them to count nulls
+      if (definitionLevelsSize > 0 && definitionLevelsSize < 1024) {
+        try {
+          // The size includes the 4-byte length prefix
+          const levelDataLength = view.getUint32(definitionLevelsOffset, true)
+          const bitWidth = Math.ceil(Math.log2(maxDefinitionLevel + 1))
+
+          // Decode definition levels
+          const definitionLevels = decodeRleBitPackedLevels(
+            view,
+            definitionLevelsOffset + 4, // skip length prefix
+            levelDataLength,
+            bitWidth,
+            numValues
+          )
+
+          // Count nulls (values with definition level < maxDefinitionLevel)
+          nullCount = countNullsFromDefinitionLevels(definitionLevels, maxDefinitionLevel)
+        } catch (error) {
+          // If decoding fails, just skip null counting
+          console.warn('Failed to decode definition levels for null counting:', error)
+        }
+      }
+    }
+
+    // Remaining data is values
+    valuesSize = byteLength - offset
+  }
+  // Handle Dictionary Page (no levels)
+  else if (pageInfo.dictionaryPageHeader) {
+    // Dictionary pages don't have repetition or definition levels
+    repetitionLevelsSize = 0
+    definitionLevelsSize = 0
+    valuesSize = byteLength
+  }
+  // Handle other page types
+  else {
+    // Unknown page type, treat all as values
+    valuesSize = byteLength
+  }
+
+  const result: PageSizeBreakdown = {
+    pageNumber: pageInfo.pageNumber,
+    pageType,
+    headerSize: pageInfo.headerSize || 0,
+    repetitionLevelsSize,
+    definitionLevelsSize,
+    valuesSize,
+    totalDataSize: byteLength,
+  }
+
+  // Add null count if available
+  if (nullCount !== undefined) {
+    result.nullCount = nullCount
+  }
+
+  return result
+}
+
+/**
+ * Parse all pages in a column chunk and extract size breakdowns
+ *
+ * This function reads and decompresses all pages in a column chunk,
+ * then analyzes each page to determine the size breakdown.
+ *
+ * @param columnChunkMetadata - Column chunk metadata
+ * @param readByteRange - Function to read arbitrary byte ranges
+ * @param maxRepetitionLevel - Maximum repetition level for the column
+ * @param maxDefinitionLevel - Maximum definition level for the column
+ * @returns Array of size breakdowns for each page
+ */
+export async function parseColumnChunkPageSizes(
+  columnChunkMetadata: any,
+  readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>,
+  maxRepetitionLevel: number,
+  maxDefinitionLevel: number
+): Promise<PageSizeBreakdown[]> {
+  // First, get the page headers
+  const pages = await parseParquetPage(columnChunkMetadata, readByteRange)
+
+  const pageSizes: PageSizeBreakdown[] = []
+
+  const colMeta = columnChunkMetadata.meta_data
+  if (!colMeta) {
+    throw new Error('Missing metadata for column chunk')
+  }
+
+  const codec = colMeta.codec
+
+  // For each page, read the data and calculate sizes
+  for (const page of pages) {
+    const pageOffset = Number(page.offset)
+    const headerSize = page.headerSize || 0
+    const compressedSize = page.compressedSize || 0
+    const uncompressedSize = page.uncompressedSize || compressedSize
+
+    // Read the compressed page data (after header)
+    const compressedData = await readByteRange(
+      pageOffset + headerSize,
+      compressedSize
+    )
+
+    // Decompress the page data
+    // For DATA_PAGE_V2, check the is_compressed flag
+    let uncompressedBytes: Uint8Array
+    if (page.dataPageHeaderV2 && page.dataPageHeaderV2.is_compressed === false) {
+      // Data is already uncompressed
+      uncompressedBytes = new Uint8Array(compressedData)
+    } else {
+      // Normal decompression based on codec
+      uncompressedBytes = decompressPageData(
+        compressedData,
+        uncompressedSize,
+        codec
+      )
+    }
+
+    // Parse the page data sizes
+    const sizeBreakdown = parsePageDataSizes(
+      page,
+      uncompressedBytes,
+      maxRepetitionLevel,
+      maxDefinitionLevel
+    )
+
+    pageSizes.push(sizeBreakdown)
+  }
+
+  return pageSizes
 }
