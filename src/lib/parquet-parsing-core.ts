@@ -5,10 +5,11 @@
  * Platform-specific I/O (Node.js fs, browser File API) is handled by separate modules.
  */
 
-import { parquetMetadata, snappyUncompress } from 'hyparquet'
+import {parquetMetadata, RowGroup, snappyUncompress} from 'hyparquet'
 import { deserializeTCompactProtocol } from 'hyparquet/src/thrift.js'
 import { PageType, Encoding } from 'hyparquet/src/constants.js'
 import { decompress as zstdDecompress } from 'fzstd'
+import { SchemaElement } from 'hyparquet/src/types.js'
 
 /**
  * File metadata extracted from the Parquet footer
@@ -19,8 +20,8 @@ export interface ParquetFileMetadata {
   numRowGroups: number
   numColumns: number
   createdBy?: string
-  schema: any[]
-  rowGroups: any[]
+  schema: SchemaElement[]
+  rowGroups: RowGroup[]
   keyValueMetadata?: Array<{ key: string; value?: string }>
   footerLength?: number
 }

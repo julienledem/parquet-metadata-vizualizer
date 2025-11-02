@@ -41,3 +41,4 @@ temp/
 
 # Test cache
 .vitest-cache/
+*.iml

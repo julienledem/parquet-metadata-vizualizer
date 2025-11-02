@@ -1,13 +1,31 @@
-import type { ParquetPageMetadata } from '../../../src/lib/parquet-parsing'
+import type { ParquetPageMetadata, ParquetFileMetadata, RowGroupMetadata, ColumnChunkMetadata } from '../../../src/lib/parquet-parsing'
+// import type { ParquetPageMetadata, ParquetFileMetadata, RowGroupMetadata, ColumnChunkMetadata } from "hyparquet/src/metadata.js"
 import './StructureView.css'
+import type {SchemaElement, RowGroup, ColumnChunk, ColumnMetaData} from "hyparquet";
+import { useState } from 'react'
 
 interface StructureViewProps {
   metadata: ParquetPageMetadata
   onColumnClick: (rowGroupIndex: number, columnIndex: number) => void
 }
 
-function StructureView({ metadata, onColumnClick }: StructureViewProps) {
-  const { fileMetadata, rowGroups } = metadata
+export default function StructureView({ metadata, onColumnClick }: StructureViewProps) {
+  const fileMetadata: ParquetFileMetadata = metadata.fileMetadata;
+  const rowGroups: RowGroupMetadata[] = metadata.rowGroups;
+
+  // État pour gérer les sections réduites
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+
+  // Fonction pour basculer l'état réduit/développé
+  const toggleCollapse = (sectionId: string) => {
+    const newCollapsed = new Set(collapsedSections)
+    if (newCollapsed.has(sectionId)) {
+      newCollapsed.delete(sectionId)
+    } else {
+      newCollapsed.add(sectionId)
+    }
+    setCollapsedSections(newCollapsed)
+  }
 
   // Calculate byte positions for visual layout
   const calculateLayout = () => {
@@ -22,8 +40,10 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
         start: number
         size: number
         rowGroupIndex?: number
-        columnIndex?: number
-      }>
+        columnIndex?: number,
+        columnMetadata?: SchemaElement,
+        children?: Array<any> // TODO
+        }>
     }> = []
 
     // Header (magic number)
@@ -47,22 +67,28 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
         start: number
         size: number
         rowGroupIndex?: number
-        columnIndex?: number
+        columnIndex?: number,
+        columnName?: string,
+        columnMetadata?: SchemaElement
       }> = []
 
       // Show details for first MAX_COLUMNS_TO_DISPLAY columns, then summarize
       const columnsToShow = Math.min(rg.columns.length, MAX_COLUMNS_TO_DISPLAY)
 
       for (let colIndex = 0; colIndex < columnsToShow; colIndex++) {
-        const col = rg.columns[colIndex]
+        const col: ColumnChunkMetadata = rg.columns[colIndex]
+        const columnName = col.columnName;
         const colSize = Number(col.totalCompressedSize)
+        const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
         columns.push({
           type: 'column',
-          label: `Column ${colIndex}: ${col.columnName} (${colSize.toLocaleString()} bytes)`,
+          label: `Column ${colIndex}: ${columnName} (${colSize.toLocaleString()} bytes)`,
           start: currentOffset,
           size: colSize,
           rowGroupIndex: rgIndex,
           columnIndex: colIndex,
+          columnName: columnName,
+          columnMetadata: foundCol.schema,
         })
         currentOffset += colSize
       }
@@ -111,22 +137,148 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
 
     // Offset indexes (if present)
     if (totalOffsetIndexSize > 0) {
+      const offsetStart = currentOffset
+      const offsetChildren: Array<{
+        type: string
+        label: string
+        start: number
+        size: number
+        rowGroupIndex?: number
+        children?: Array<{
+          type: string
+          label: string
+          start: number
+          size: number
+          rowGroupIndex?: number
+          columnIndex?: number
+          columnName?: string, // deprecated
+          columnMetadata?: SchemaElement,
+          offset_index_offset?: number
+          offset_index_length?: number
+        }>
+      }> = []
+
+      let rgRunningOffset = 0
+      fileMetadata.rowGroups.forEach((rg: RowGroup, rgIndex: number) => {
+        const rgOffsetSize = rg.columns.reduce((sum: number, col: any) => {
+          return sum + (col.offset_index_length !== undefined ? Number(col.offset_index_length) : 0)
+        }, 0)
+
+        if (rgOffsetSize > 0) {
+          let colRunningOffset = 0
+          const colChildren: Array<any> = []
+          rg.columns.forEach((col: ColumnChunk, colIndex: number) => {
+            const columnMetadata = col.meta_data!!;
+            const columnName: string = columnMetadata.path_in_schema.reduce((l,r)=> l + '.' + r);
+            if (col.offset_index_length !== undefined && col.offset_index_length > 0) {
+              const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
+              colChildren.push({
+                type: 'offset-index-column',
+                label: `Column ${colIndex}: ${columnName} (${col.offset_index_length.toLocaleString()} bytes)`,
+                start: offsetStart + rgRunningOffset + colRunningOffset,
+                size: col.offset_index_length,
+                rowGroupIndex: rgIndex,
+                columnIndex: colIndex,
+                columnName: columnName,
+                columnMetadata: foundCol.schema,
+                offset_index_offset: col.offset_index_offset,
+                offset_index_length: col.offset_index_length,
+              })
+              colRunningOffset += col.offset_index_length
+            }
+          })
+
+          offsetChildren.push({
+            type: 'offset-index-rowgroup',
+            label: `Row Group ${rgIndex} Offset Indexes (${rgOffsetSize.toLocaleString()} bytes)`,
+            start: offsetStart + rgRunningOffset,
+            size: rgOffsetSize,
+            rowGroupIndex: rgIndex,
+            children: colChildren,
+          })
+          rgRunningOffset += rgOffsetSize
+        }
+      })
+
       layout.push({
         type: 'offset-index',
         label: `Offset Indexes (${offsetIndexCount} indexes, page location metadata)`,
-        start: currentOffset,
+        start: offsetStart,
         size: totalOffsetIndexSize,
+        children: offsetChildren,
       })
       currentOffset += totalOffsetIndexSize
     }
 
     // Column indexes (if present)
     if (totalColumnIndexSize > 0) {
+      const columnStart = currentOffset
+      const columnChildren: Array<{
+        type: string
+        label: string
+        start: number
+        size: number
+        rowGroupIndex?: number
+        children?: Array<{
+          type: string
+          label: string
+          start: number
+          size: number
+          rowGroupIndex?: number
+          columnIndex?: number
+          columnName?: string
+          column_index_offset?: number
+          column_index_length?: number
+        }>
+      }> = []
+
+      let rgColRunningOffset = 0
+      fileMetadata.rowGroups.forEach((rg: RowGroup, rgIndex: number) => {
+        const rgColumnIndexSize = rg.columns.reduce((sum: number, col: any) => {
+          return sum + (col.column_index_length !== undefined ? Number(col.column_index_length) : 0)
+        }, 0)
+
+        if (rgColumnIndexSize > 0) {
+          let colRunningOffset = 0
+          const colChildren: Array<any> = []
+          rg.columns.forEach((col: ColumnChunk, colIndex: number) => {
+            const columnName: string = col.meta_data?.path_in_schema.reduce((l,r) => l + '.' + r) || '';
+            if (col.column_index_length !== undefined && col.column_index_length > 0) {
+              const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
+              colChildren.push({
+                type: 'column-index-column',
+                label: `Column ${colIndex}: ${columnName} (${col.column_index_length.toLocaleString()} bytes)`,
+                start: columnStart + rgColRunningOffset + colRunningOffset,
+                size: col.column_index_length,
+                rowGroupIndex: rgIndex,
+                columnIndex: colIndex,
+                columnName,
+                columnMetadata: foundCol.schema,
+                column_index_offset: col.column_index_offset,
+                column_index_length: col.column_index_length,
+              })
+              colRunningOffset += col.column_index_length
+            }
+          })
+
+          columnChildren.push({
+            type: 'column-index-rowgroup',
+            label: `Row Group ${rgIndex} Column Indexes (${rgColumnIndexSize.toLocaleString()} bytes)`,
+            start: columnStart + rgColRunningOffset,
+            size: rgColumnIndexSize,
+            rowGroupIndex: rgIndex,
+            children: colChildren,
+          })
+          rgColRunningOffset += rgColumnIndexSize
+        }
+      })
+
       layout.push({
         type: 'column-index',
         label: `Column Indexes (${columnIndexCount} indexes, statistics per page)`,
-        start: currentOffset,
+        start: columnStart,
         size: totalColumnIndexSize,
+        children: columnChildren,
       })
       currentOffset += totalColumnIndexSize
     }
@@ -158,31 +310,67 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
       <div className="structure-diagram">
         {layout.map((section, idx) => (
           <div key={idx} className={`structure-section ${section.type}`}>
-            <div className="section-header">
+            <div
+              className="section-header"
+              onClick={() => section.children && toggleCollapse(`${section.type}-${idx}`)}
+              style={{ cursor: section.children ? 'pointer' : 'default' }}
+            >
+              {section.children && (
+                <span className="collapse-icon">
+                  {collapsedSections.has(`${section.type}-${idx}`) ? '▶' : '▼'}
+                </span>
+              )}
               <span className="section-label">{section.label}</span>
               <span className="section-offset">
                 Offset: {section.start.toLocaleString()} | Size: {section.size.toLocaleString()} bytes
               </span>
             </div>
-            {section.children && section.children.length > 0 && (
+            {section.children && section.children.length > 0 && !collapsedSections.has(`${section.type}-${idx}`) && (
               <div className="section-children">
                 {section.children.map((child, childIdx) => (
                   <div
                     key={childIdx}
                     className={`structure-section ${child.type} ${child.type === 'column' ? 'clickable' : ''}`}
-                    onClick={() => {
-                      if (child.type === 'column' && child.rowGroupIndex !== undefined && child.columnIndex !== undefined) {
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (child.children) {
+                        toggleCollapse(`${section.type}-${idx}-${child.type}-${childIdx}`)
+                      } else if (child.type === 'column' && child.rowGroupIndex !== undefined && child.columnIndex !== undefined) {
                         onColumnClick(child.rowGroupIndex, child.columnIndex)
                       }
                     }}
-                    style={{ cursor: child.type === 'column' ? 'pointer' : 'default' }}
+                    style={{ cursor: child.children || child.type === 'column' ? 'pointer' : 'default' }}
                   >
                     <div className="section-header child">
+                      {child.children && (
+                        <span className="collapse-icon">
+                          {collapsedSections.has(`${section.type}-${idx}-${child.type}-${childIdx}`) ? '▶' : '▼'}
+                        </span>
+                      )}
                       <span className="section-label">{child.label}</span>
                       <span className="section-offset">
                         Offset: {child.start.toLocaleString()}
                       </span>
                     </div>
+                    {child.children && child.children.length > 0 && !collapsedSections.has(`${section.type}-${idx}-${child.type}-${childIdx}`) && (
+                      <div className="section-children">
+                        {child.children.map((colChild, colChildIdx) => (
+                          <div
+                            key={colChildIdx}
+                            className={`structure-section ${colChild.type}`}
+                            style={{ marginLeft: 16 }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="section-header child">
+                              <span className="section-label">{colChild.label}</span>
+                              <span className="section-offset">
+                                Offset: {(colChild.offset_index_offset ?? colChild.column_index_offset)?.toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -218,4 +406,11 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
   )
 }
 
-export default StructureView
+interface FoundSchemaElement {
+  columnName: string;
+  schema?: SchemaElement
+}
+function columnMetadataForColumnChunkMetadata(fileMetadata: ParquetFileMetadata, columnName: string): FoundSchemaElement {
+  const schema = fileMetadata.schema.find(col => col.name === columnName);
+  return { columnName, schema };
+}
