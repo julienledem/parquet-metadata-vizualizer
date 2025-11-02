@@ -38,7 +38,8 @@ function PagesView({ metadata, file, initialRowGroup, initialColumn }: PagesView
     const loadPages = async () => {
       setIsLoadingPages(true)
       try {
-        const rawColumnChunk = metadata.fileMetadata.rowGroups[selectedRowGroup].columns[selectedColumn]
+        const rawColumnChunk = metadata.fileMetadata.rowGroups[selectedRowGroup].columns[selectedColumn];
+        const columnMetadata = rawColumnChunk.meta_data!!; // assume not undefined
         const byteRangeReader = async (offset: number, length: number): Promise<ArrayBuffer> => {
           const slice = file.slice(offset, offset + length)
           return await slice.arrayBuffer()
@@ -47,14 +48,14 @@ function PagesView({ metadata, file, initialRowGroup, initialColumn }: PagesView
         setPages(parsedPages)
 
         // Calculate max levels for this column
-        const columnPath = rawColumnChunk.meta_data.path_in_schema
+        const columnPath = columnMetadata.path_in_schema
         const { maxRepetitionLevel, maxDefinitionLevel } = calculateMaxLevels(
           metadata.fileMetadata.schema,
           columnPath
         )
 
         // Get the compression codec for this column
-        const codec = rawColumnChunk.meta_data.codec
+        const codec = columnMetadata.codec
 
         // Parse size breakdowns for each page
         const breakdowns: PageSizeBreakdown[] = []

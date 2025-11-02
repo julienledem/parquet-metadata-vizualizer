@@ -5,7 +5,7 @@
  * Platform-specific I/O (Node.js fs, browser File API) is handled by separate modules.
  */
 
-import {parquetMetadata, RowGroup, snappyUncompress} from 'hyparquet'
+import {ColumnChunk, parquetMetadata, RowGroup, snappyUncompress} from 'hyparquet'
 import { deserializeTCompactProtocol } from 'hyparquet/src/thrift.js'
 import { PageType, Encoding } from 'hyparquet/src/constants.js'
 import { decompress as zstdDecompress } from 'fzstd'
@@ -48,8 +48,8 @@ export interface PageInfo {
     statistics?: {
       max?: any
       min?: any
-      null_count?: any
-      distinct_count?: any
+      null_count?: number
+      distinct_count?: number
       max_value?: any
       min_value?: any
     }
@@ -167,7 +167,7 @@ export interface ParquetPageMetadata {
  * @param schema - Parquet schema array
  * @returns Number of leaf columns
  */
-function countLeafColumns(schema: any[]): number {
+function countLeafColumns(schema: SchemaElement[]): number {
   if (!schema || schema.length === 0) return 0
 
   let leafCount = 0
@@ -219,7 +219,7 @@ export function parseParquetFooter(footerBuffer: ArrayBuffer): ParquetFileMetada
  */
 export async function parseParquetPageIndex(
   footerBuffer: ArrayBuffer,
-  _readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>,
+  _readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>, // TODO unused yet?
   footerLength?: number
 ): Promise<ParquetPageMetadata> {
   const metadata = parquetMetadata(footerBuffer)
@@ -296,7 +296,7 @@ export async function parseParquetPageIndex(
 
         // Count pages from encoding stats if available
         if (colMeta.encoding_stats && colMeta.encoding_stats.length > 0) {
-          colMeta.encoding_stats.forEach((stat: any) => {
+          colMeta.encoding_stats.forEach(stat => {
             aggregateStats.totalPages += stat.count
           })
         }
@@ -328,7 +328,7 @@ export async function parseParquetPageIndex(
           columnMetadata.indexPageOffset = colMeta.index_page_offset
         }
         if (colMeta.encoding_stats) {
-          columnMetadata.encodingStats = colMeta.encoding_stats.map((stat: any) => ({
+          columnMetadata.encodingStats = colMeta.encoding_stats.map(stat => ({
             pageType: stat.page_type,
             encoding: stat.encoding,
             count: stat.count,
@@ -407,7 +407,7 @@ export async function parseParquetPageIndex(
  * @returns Array of parsed page information
  */
 export async function parseParquetPage(
-  columnChunkMetadata: any,
+  columnChunkMetadata: ColumnChunk,
   readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>
 ): Promise<PageInfo[]> {
   const pages: PageInfo[] = []
@@ -503,7 +503,7 @@ export async function parseParquetPage(
       bufferOffset = bufferOffset + reader.offset + pageHeader.compressed_page_size
     }
   } catch (e) {
-    console.warn(`Failed to parse page data: ${columnChunkMetadata.meta_data.path_in_schema.join('.')} page ${pageNumber}`, e)
+    console.warn(`Failed to parse page data: ${columnChunkMetadata.meta_data?.path_in_schema.join('.')} page ${pageNumber}`, e)
   }
 
   // We never fall back. If this doesn't work, we fix the page parsing
@@ -765,7 +765,7 @@ export function decompressPageData(
  * @returns Object with maxRepetitionLevel and maxDefinitionLevel
  */
 export function calculateMaxLevels(
-  schema: any[],
+  schema: SchemaElement[],
   columnPath: string[]
 ): { maxRepetitionLevel: number; maxDefinitionLevel: number } {
   let maxRepetitionLevel = 0
@@ -964,7 +964,7 @@ export function parsePageDataSizes(
  * @returns Array of size breakdowns for each page
  */
 export async function parseColumnChunkPageSizes(
-  columnChunkMetadata: any,
+  columnChunkMetadata: ColumnChunk,
   readByteRange: (offset: number, length: number) => Promise<ArrayBuffer>,
   maxRepetitionLevel: number,
   maxDefinitionLevel: number

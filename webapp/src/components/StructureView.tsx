@@ -1,7 +1,7 @@
 import type { ParquetPageMetadata, ParquetFileMetadata, RowGroupMetadata, ColumnChunkMetadata } from '../../../src/lib/parquet-parsing'
 // import type { ParquetPageMetadata, ParquetFileMetadata, RowGroupMetadata, ColumnChunkMetadata } from "hyparquet/src/metadata.js"
 import './StructureView.css'
-import type {SchemaElement, RowGroup, ColumnChunk, ColumnMetaData} from "hyparquet";
+import type {SchemaElement, RowGroup, ColumnChunk} from "hyparquet";
 import { useState } from 'react'
 
 interface StructureViewProps {
@@ -122,8 +122,8 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
     let offsetIndexCount = 0
     let columnIndexCount = 0
 
-    fileMetadata.rowGroups.forEach((rg: any) => {
-      rg.columns.forEach((col: any) => {
+    fileMetadata.rowGroups.forEach((rg: RowGroup) => {
+      rg.columns.forEach((col: ColumnChunk) => {
         if (col.offset_index_offset !== undefined && col.offset_index_length !== undefined) {
           totalOffsetIndexSize += col.offset_index_length
           offsetIndexCount++
@@ -136,6 +136,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
     })
 
     // Offset indexes (if present)
+    // see thrift definition for "struct OffsetIndex" in https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1138
     if (totalOffsetIndexSize > 0) {
       const offsetStart = currentOffset
       const offsetChildren: Array<{
@@ -169,7 +170,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
           const colChildren: Array<any> = []
           rg.columns.forEach((col: ColumnChunk, colIndex: number) => {
             const columnMetadata = col.meta_data!!;
-            const columnName: string = columnMetadata.path_in_schema.reduce((l,r)=> l + '.' + r);
+            const columnName: string = columnMetadata.path_in_schema.join('.');
             if (col.offset_index_length !== undefined && col.offset_index_length > 0) {
               const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
               colChildren.push({
@@ -211,6 +212,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
     }
 
     // Column indexes (if present)
+    // see thrift definition for "struct ColumnIndex" in https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1163
     if (totalColumnIndexSize > 0) {
       const columnStart = currentOffset
       const columnChildren: Array<{
@@ -242,7 +244,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
           let colRunningOffset = 0
           const colChildren: Array<any> = []
           rg.columns.forEach((col: ColumnChunk, colIndex: number) => {
-            const columnName: string = col.meta_data?.path_in_schema.reduce((l,r) => l + '.' + r) || '';
+            const columnName: string = col.meta_data?.path_in_schema.join('.') || '';
             if (col.column_index_length !== undefined && col.column_index_length > 0) {
               const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
               colChildren.push({
