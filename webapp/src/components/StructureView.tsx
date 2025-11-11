@@ -153,75 +153,87 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
     // see thrift definition for "struct OffsetIndex" in https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1138
     if (totalOffsetIndexSize > 0) {
       const offsetStart = currentOffset
-      const offsetChildren: Array<{
-        type: string
-        label: string
-        start: number
-        size: number
-        rowGroupIndex?: number
-        children?: Array<{
+      const MAX_INDEX_SIZE_TO_DISPLAY = 1024 * 1024 // 1MB
+
+      // Skip detailed parsing if indexes are too large (performance optimization)
+      if (totalOffsetIndexSize > MAX_INDEX_SIZE_TO_DISPLAY) {
+        layout.push({
+          type: 'offset-index',
+          label: `Offset Indexes (${offsetIndexCount} indexes, page location metadata) - ${totalOffsetIndexSize.toLocaleString()} bytes (too large to display details)`,
+          start: offsetStart,
+          size: totalOffsetIndexSize,
+        })
+      } else {
+        const offsetChildren: Array<{
           type: string
           label: string
           start: number
           size: number
           rowGroupIndex?: number
-          columnIndex?: number
-          columnName?: string
-          columnMetadata?: SchemaElement
-          offset_index_offset?: number
-          offset_index_length?: number
-        }>
-      }> = []
+          children?: Array<{
+            type: string
+            label: string
+            start: number
+            size: number
+            rowGroupIndex?: number
+            columnIndex?: number
+            columnName?: string
+            columnMetadata?: SchemaElement
+            offset_index_offset?: number
+            offset_index_length?: number
+          }>
+        }> = []
 
-      let rgRunningOffset = 0
-      fileMetadata.rowGroups.forEach((rg: RowGroup, rgIndex: number) => {
-        const rgOffsetSize = rg.columns.reduce((sum: number, col: any) => {
-          return sum + (col.offset_index_length !== undefined ? Number(col.offset_index_length) : 0)
-        }, 0)
+        let rgRunningOffset = 0
+        fileMetadata.rowGroups.forEach((rg: RowGroup, rgIndex: number) => {
+          const rgOffsetSize = rg.columns.reduce((sum: number, col: any) => {
+            return sum + (col.offset_index_length !== undefined ? Number(col.offset_index_length) : 0)
+          }, 0)
 
-        if (rgOffsetSize > 0) {
-          let colRunningOffset = 0
-          const colChildren: Array<any> = []
-          rg.columns.forEach((col: ColumnChunk, colIndex: number) => {
-            const columnMetadata = col.meta_data!!;
-            const columnName: string = columnMetadata.path_in_schema.join('.');
-            if (col.offset_index_length !== undefined && col.offset_index_length > 0) {
-              const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
-              colChildren.push({
-                type: 'offset-index-column',
-                label: `Column ${colIndex}: ${columnName} (${col.offset_index_length.toLocaleString()} bytes)`,
-                start: offsetStart + rgRunningOffset + colRunningOffset,
-                size: col.offset_index_length,
-                rowGroupIndex: rgIndex,
-                columnIndex: colIndex,
-                columnName: columnName,
-                columnMetadata: foundCol.schema,
-                offset_index_offset: col.offset_index_offset,
-                offset_index_length: col.offset_index_length,
-              })
-              colRunningOffset += col.offset_index_length
-            }
-          })
+          if (rgOffsetSize > 0) {
+            let colRunningOffset = 0
+            const colChildren: Array<any> = []
+            rg.columns.forEach((col: ColumnChunk, colIndex: number) => {
+              const columnMetadata = col.meta_data!!;
+              const columnName: string = columnMetadata.path_in_schema.join('.');
+              if (col.offset_index_length !== undefined && col.offset_index_length > 0) {
+                const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
+                colChildren.push({
+                  type: 'offset-index-column',
+                  label: `Column ${colIndex}: ${columnName} (${col.offset_index_length.toLocaleString()} bytes)`,
+                  start: offsetStart + rgRunningOffset + colRunningOffset,
+                  size: col.offset_index_length,
+                  rowGroupIndex: rgIndex,
+                  columnIndex: colIndex,
+                  columnName: columnName,
+                  columnMetadata: foundCol.schema,
+                  offset_index_offset: col.offset_index_offset,
+                  offset_index_length: col.offset_index_length,
+                })
+                colRunningOffset += col.offset_index_length
+              }
+            })
 
-          offsetChildren.push({
-            type: 'offset-index-rowgroup',
-            label: `Row Group ${rgIndex} Offset Indexes (${rgOffsetSize.toLocaleString()} bytes)`,
-            start: offsetStart + rgRunningOffset,
-            size: rgOffsetSize,
-            rowGroupIndex: rgIndex,
-            children: colChildren,
-          })
-          rgRunningOffset += rgOffsetSize
-        }
-      })
+            offsetChildren.push({
+              type: 'offset-index-rowgroup',
+              label: `Row Group ${rgIndex} Offset Indexes (${rgOffsetSize.toLocaleString()} bytes)`,
+              start: offsetStart + rgRunningOffset,
+              size: rgOffsetSize,
+              rowGroupIndex: rgIndex,
+              children: colChildren,
+            })
+            rgRunningOffset += rgOffsetSize
+          }
+        })
 
-      layout.push({
-        type: 'offset-index',
-        label: `Offset Indexes (${offsetIndexCount} indexes, page location metadata)`,
-        start: offsetStart,
-        size: totalOffsetIndexSize,
-        children: offsetChildren,
-      })
+        layout.push({
+          type: 'offset-index',
+          label: `Offset Indexes (${offsetIndexCount} indexes, page location metadata)`,
+          start: offsetStart,
+          size: totalOffsetIndexSize,
+          children: offsetChildren,
+        })
+      }
       currentOffset += totalOffsetIndexSize
     }
 
@@ -229,74 +241,86 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
     // see thrift definition for "struct ColumnIndex" in https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1163
     if (totalColumnIndexSize > 0) {
       const columnStart = currentOffset
-      const columnChildren: Array<{
-        type: string
-        label: string
-        start: number
-        size: number
-        rowGroupIndex?: number
-        children?: Array<{
+      const MAX_INDEX_SIZE_TO_DISPLAY = 1024 * 1024 // 1MB
+
+      // Skip detailed parsing if indexes are too large (performance optimization)
+      if (totalColumnIndexSize > MAX_INDEX_SIZE_TO_DISPLAY) {
+        layout.push({
+          type: 'column-index',
+          label: `Column Indexes (${columnIndexCount} indexes, statistics per page) - ${totalColumnIndexSize.toLocaleString()} bytes (too large to display details)`,
+          start: columnStart,
+          size: totalColumnIndexSize,
+        })
+      } else {
+        const columnChildren: Array<{
           type: string
           label: string
           start: number
           size: number
           rowGroupIndex?: number
-          columnIndex?: number
-          columnName?: string
-          columnMetadata?: SchemaElement
-          column_index_offset?: number
-          column_index_length?: number
-        }>
-      }> = []
+          children?: Array<{
+            type: string
+            label: string
+            start: number
+            size: number
+            rowGroupIndex?: number
+            columnIndex?: number
+            columnName?: string
+            columnMetadata?: SchemaElement
+            column_index_offset?: number
+            column_index_length?: number
+          }>
+        }> = []
 
-      let rgColRunningOffset = 0
-      fileMetadata.rowGroups.forEach((rg: RowGroup, rgIndex: number) => {
-        const rgColumnIndexSize = rg.columns.reduce((sum: number, col: any) => {
-          return sum + (col.column_index_length !== undefined ? Number(col.column_index_length) : 0)
-        }, 0)
+        let rgColRunningOffset = 0
+        fileMetadata.rowGroups.forEach((rg: RowGroup, rgIndex: number) => {
+          const rgColumnIndexSize = rg.columns.reduce((sum: number, col: any) => {
+            return sum + (col.column_index_length !== undefined ? Number(col.column_index_length) : 0)
+          }, 0)
 
-        if (rgColumnIndexSize > 0) {
-          let colRunningOffset = 0
-          const colChildren: Array<any> = []
-          rg.columns.forEach((col: ColumnChunk, colIndex: number) => {
-            const columnName: string = col.meta_data?.path_in_schema.join('.') || '';
-            if (col.column_index_length !== undefined && col.column_index_length > 0) {
-              const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
-              colChildren.push({
-                type: 'column-index-column',
-                label: `Column ${colIndex}: ${columnName} (${col.column_index_length.toLocaleString()} bytes)`,
-                start: columnStart + rgColRunningOffset + colRunningOffset,
-                size: col.column_index_length,
-                rowGroupIndex: rgIndex,
-                columnIndex: colIndex,
-                columnName,
-                columnMetadata: foundCol.schema,
-                column_index_offset: col.column_index_offset,
-                column_index_length: col.column_index_length,
-              })
-              colRunningOffset += col.column_index_length
-            }
-          })
+          if (rgColumnIndexSize > 0) {
+            let colRunningOffset = 0
+            const colChildren: Array<any> = []
+            rg.columns.forEach((col: ColumnChunk, colIndex: number) => {
+              const columnName: string = col.meta_data?.path_in_schema.join('.') || '';
+              if (col.column_index_length !== undefined && col.column_index_length > 0) {
+                const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
+                colChildren.push({
+                  type: 'column-index-column',
+                  label: `Column ${colIndex}: ${columnName} (${col.column_index_length.toLocaleString()} bytes)`,
+                  start: columnStart + rgColRunningOffset + colRunningOffset,
+                  size: col.column_index_length,
+                  rowGroupIndex: rgIndex,
+                  columnIndex: colIndex,
+                  columnName,
+                  columnMetadata: foundCol.schema,
+                  column_index_offset: col.column_index_offset,
+                  column_index_length: col.column_index_length,
+                })
+                colRunningOffset += col.column_index_length
+              }
+            })
 
-          columnChildren.push({
-            type: 'column-index-rowgroup',
-            label: `Row Group ${rgIndex} Column Indexes (${rgColumnIndexSize.toLocaleString()} bytes)`,
-            start: columnStart + rgColRunningOffset,
-            size: rgColumnIndexSize,
-            rowGroupIndex: rgIndex,
-            children: colChildren,
-          })
-          rgColRunningOffset += rgColumnIndexSize
-        }
-      })
+            columnChildren.push({
+              type: 'column-index-rowgroup',
+              label: `Row Group ${rgIndex} Column Indexes (${rgColumnIndexSize.toLocaleString()} bytes)`,
+              start: columnStart + rgColRunningOffset,
+              size: rgColumnIndexSize,
+              rowGroupIndex: rgIndex,
+              children: colChildren,
+            })
+            rgColRunningOffset += rgColumnIndexSize
+          }
+        })
 
-      layout.push({
-        type: 'column-index',
-        label: `Column Indexes (${columnIndexCount} indexes, statistics per page)`,
-        start: columnStart,
-        size: totalColumnIndexSize,
-        children: columnChildren,
-      })
+        layout.push({
+          type: 'column-index',
+          label: `Column Indexes (${columnIndexCount} indexes, statistics per page)`,
+          start: columnStart,
+          size: totalColumnIndexSize,
+          children: columnChildren,
+        })
+      }
       currentOffset += totalColumnIndexSize
     }
 
