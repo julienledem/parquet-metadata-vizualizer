@@ -93,7 +93,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
         const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
         columns.push({
           type: 'column',
-          label: `Column ${colIndex}: ${columnName} (${colSize.toLocaleString()} bytes)`,
+          label: `Column ${colIndex}: ${columnName}`,
           start: currentOffset,
           size: colSize,
           rowGroupIndex: rgIndex,
@@ -123,7 +123,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
 
       layout.push({
         type: 'rowgroup',
-        label: `Row Group ${rgIndex} (${rg.numRows.toLocaleString()} rows, ${rg.columns.length} columns, ${Number(rg.totalCompressedSize || rg.totalByteSize).toLocaleString()} bytes)`,
+        label: `Row Group ${rgIndex} (${rg.numRows.toLocaleString()} rows)`,
         start: rgStart,
         size: currentOffset - rgStart,
         children: columns,
@@ -200,7 +200,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
                 const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
                 colChildren.push({
                   type: 'offset-index-column',
-                  label: `Column ${colIndex}: ${columnName} (${col.offset_index_length.toLocaleString()} bytes)`,
+                  label: `Column ${colIndex}: ${columnName}`,
                   start: offsetStart + rgRunningOffset + colRunningOffset,
                   size: col.offset_index_length,
                   rowGroupIndex: rgIndex,
@@ -216,7 +216,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
 
             offsetChildren.push({
               type: 'offset-index-rowgroup',
-              label: `Row Group ${rgIndex} Offset Indexes (${rgOffsetSize.toLocaleString()} bytes)`,
+              label: `Row Group ${rgIndex} Offset Indexes`,
               start: offsetStart + rgRunningOffset,
               size: rgOffsetSize,
               rowGroupIndex: rgIndex,
@@ -287,7 +287,7 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
                 const foundCol = columnMetadataForColumnChunkMetadata(fileMetadata, columnName)
                 colChildren.push({
                   type: 'column-index-column',
-                  label: `Column ${colIndex}: ${columnName} (${col.column_index_length.toLocaleString()} bytes)`,
+                  label: `Column ${colIndex}: ${columnName}`,
                   start: columnStart + rgColRunningOffset + colRunningOffset,
                   size: col.column_index_length,
                   rowGroupIndex: rgIndex,
