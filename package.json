@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "TMPDIR=/tmp vitest run",
-    "test:watch": "TMPDIR=/tmp vitest"
+    "test:watch": "TMPDIR=/tmp vitest",
+    "generate-html": "TMPDIR=/tmp npx tsx generate-html.ts"
   },
   "keywords": [],
   "author": "",
