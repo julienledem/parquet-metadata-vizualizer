@@ -349,6 +349,8 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
 
   const layout = calculateLayout()
 
+  const totalSize = layout.reduce((sum, section) => sum + section.size, 0)
+
   return (
     <div className="structure-view">
       <div className="structure-header">
@@ -359,103 +361,280 @@ export default function StructureView({ metadata, onColumnClick }: StructureView
       </div>
 
       <div className="structure-diagram">
-        {layout.map((section, idx) => (
-          <div key={idx} className={`structure-section ${section.type}`}>
-            <div
-              className="section-header"
-              onClick={() => section.children && toggleCollapse(`${section.type}-${idx}`)}
-              style={{ cursor: section.children ? 'pointer' : 'default' }}
-            >
-              {section.children && (
-                <span className="collapse-icon">
-                  {collapsedSections.has(`${section.type}-${idx}`) ? '▶' : '▼'}
-                </span>
-              )}
-              <span className="section-label">{section.label}</span>
-              <span className="section-offset">
-                Offset: {section.start.toLocaleString()} | Size: {section.size.toLocaleString()} bytes
-              </span>
-            </div>
-            {section.children && section.children.length > 0 && !collapsedSections.has(`${section.type}-${idx}`) && (
-              <div className="section-children">
-                {section.children.map((child, childIdx) => {
-                  // Handle pagination button for row groups
-                  if (child.type === 'load-more-button') {
+        {layout.map((section, idx) => {
+          const rowGroupPercent = section.type === 'rowgroup'
+            ? Math.round((section.size / totalSize) * 100)
+            : null
+
+          return (
+            <div key={idx} className={`structure-section ${section.type}`}>
+              <div
+                className="section-header"
+                onClick={() => section.children && toggleCollapse(`${section.type}-${idx}`)}
+                style={{
+                  cursor: section.children ? 'pointer' : 'default',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  minHeight: 32
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                  {section.children && (
+                    <span className="collapse-icon">
+                      {collapsedSections.has(`${section.type}-${idx}`) ? '▶' : '▼'}
+                    </span>
+                  )}
+                  <span className="section-label">{section.label}</span>
+                </div>
+                {/* 3 colonnes flex : taille, barre %, offset */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  minWidth: 400,
+                  gap: 0,
+                  justifyContent: 'flex-end'
+                }}>
+                  {/* Colonne 1 : taille en bytes */}
+                  <span style={{
+                    minWidth: 120,
+                    textAlign: 'right',
+                    paddingRight: 12,
+                    fontVariantNumeric: 'tabular-nums'
+                  }}>
+                    {section.size.toLocaleString()} bytes
+                  </span>
+                  {/* Colonne 2 : barre de % */}
+                  <span style={{
+                    minWidth: 140,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    paddingRight: 12
+                  }}>
+                    {section.type === 'rowgroup' && (
+                      <>
+                        <div style={{
+                          background: '#e0e0e0',
+                          borderRadius: 4,
+                          height: 14,
+                          width: 100,
+                          position: 'relative',
+                          marginRight: 6
+                        }}>
+                          <div style={{
+                            background: '#4caf50',
+                            height: '100%',
+                            width: `${rowGroupPercent}%`,
+                            borderRadius: 4,
+                            transition: 'width 0.3s'
+                          }} />
+                        </div>
+                        <span style={{
+                          fontSize: 12,
+                          color: '#333',
+                          minWidth: 36,
+                          textAlign: 'right'
+                        }}>
+                          {rowGroupPercent}%
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  {/* Colonne 3 : offset */}
+                  <span style={{
+                    minWidth: 120,
+                    textAlign: 'right',
+                    fontVariantNumeric: 'tabular-nums'
+                  }}>
+                    Offset: {section.start.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              {section.children && section.children.length > 0 && !collapsedSections.has(`${section.type}-${idx}`) && (
+                <div className="section-children">
+                  {section.children.map((child, childIdx) => {
+                    // Pagination bouton
+                    if (child.type === 'load-more-button') {
+                      return (
+                        <div
+                          key={childIdx}
+                          className="structure-section load-more-button"
+                          style={{ cursor: 'pointer', padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}
+                          onClick={() => {
+                            if (child.rowGroupIndex !== undefined) {
+                              handleLoadMore(child.rowGroupIndex)
+                            }
+                          }}
+                        >
+                          <div className="section-header child">
+                            <span className="section-label" style={{ fontWeight: 'bold', color: '#0066cc' }}>
+                              {child.label}
+                            </span>
+                            <span className="section-offset">
+                              ({child.remainingCount?.toLocaleString()} remaining - {child.remainingSize?.toLocaleString()} bytes)
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    const colPercent = section.type === 'rowgroup' && child.type === 'column'
+                      ? Math.round((child.size / section.size) * 100)
+                      : null
+
                     return (
                       <div
                         key={childIdx}
-                        className="structure-section load-more-button"
-                        style={{ cursor: 'pointer', padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}
-                        onClick={() => {
-                          if (child.rowGroupIndex !== undefined) {
-                            handleLoadMore(child.rowGroupIndex)
+                        className={`structure-section ${child.type} ${child.type === 'column' ? 'clickable' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (child.children) {
+                            toggleCollapse(`${section.type}-${idx}-${child.type}-${childIdx}`)
+                          } else if (child.type === 'column' && child.rowGroupIndex !== undefined && child.columnIndex !== undefined) {
+                            onColumnClick(child.rowGroupIndex, child.columnIndex)
                           }
                         }}
+                        style={{ cursor: child.children || child.type === 'column' ? 'pointer' : 'default' }}
                       >
-                        <div className="section-header child">
-                          <span className="section-label" style={{ fontWeight: 'bold', color: '#0066cc' }}>
-                            {child.label}
-                          </span>
-                          <span className="section-offset">
-                            ({child.remainingCount?.toLocaleString()} remaining - {child.remainingSize?.toLocaleString()} bytes)
-                          </span>
+                        <div className="section-header child" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 28 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                            {child.children && (
+                              <span className="collapse-icon">
+                                {collapsedSections.has(`${section.type}-${idx}-${child.type}-${childIdx}`) ? '▶' : '▼'}
+                              </span>
+                            )}
+                            <span className="section-label">{child.label}</span>
+                          </div>
+                          {/* 3 colonnes flex : taille, barre %, offset */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            minWidth: 340,
+                            gap: 0,
+                            justifyContent: 'flex-end'
+                          }}>
+                            {/* Colonne 1 : taille en bytes */}
+                            <span style={{
+                              minWidth: 100,
+                              textAlign: 'right',
+                              paddingRight: 12,
+                              fontVariantNumeric: 'tabular-nums'
+                            }}>
+                              {child.size?.toLocaleString()} bytes
+                            </span>
+                            {/* Colonne 2 : barre de % */}
+                            <span style={{
+                              minWidth: 100,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'flex-end',
+                              paddingRight: 12
+                            }}>
+                              {section.type === 'rowgroup' && child.type === 'column' && (
+                                <>
+                                  <div style={{
+                                    background: '#f0f0f0',
+                                    borderRadius: 4,
+                                    height: 10,
+                                    width: 80,
+                                    position: 'relative',
+                                    marginRight: 6
+                                  }}>
+                                    <div style={{
+                                      background: '#2196f3',
+                                      height: '100%',
+                                      width: `${colPercent}%`,
+                                      borderRadius: 4,
+                                      transition: 'width 0.3s'
+                                    }} />
+                                  </div>
+                                  <span style={{
+                                    fontSize: 11,
+                                    color: '#333',
+                                    minWidth: 32,
+                                    textAlign: 'right'
+                                  }}>
+                                    {colPercent}%
+                                  </span>
+                                </>
+                              )}
+                            </span>
+                            {/* Colonne 3 : offset */}
+                            <span style={{
+                              minWidth: 100,
+                              textAlign: 'right',
+                              fontVariantNumeric: 'tabular-nums'
+                            }}>
+                              Offset: {child.start?.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
+                        {child.children && child.children.length > 0 && !collapsedSections.has(`${section.type}-${idx}-${child.type}-${childIdx}`) && (
+                          <div className="section-children">
+                            {child.children.map((colChild, colChildIdx) => (
+                              <div
+                                key={colChildIdx}
+                                className={`structure-section ${colChild.type}`}
+                                style={{ marginLeft: 16 }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="section-header child" style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  minHeight: 24
+                                }}>
+                                  <span className="section-label">{colChild.label}</span>
+                                  {/* 3 colonnes flex : taille, barre %, offset */}
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    minWidth: 220,
+                                    gap: 0,
+                                    justifyContent: 'flex-end'
+                                  }}>
+                                    {/* Colonne 1 : taille en bytes */}
+                                    <span style={{
+                                      minWidth: 80,
+                                      textAlign: 'right',
+                                      paddingRight: 12,
+                                      fontVariantNumeric: 'tabular-nums'
+                                    }}>
+                                      {(colChild.offset_index_length ?? colChild.column_index_length)?.toLocaleString()} bytes
+                                    </span>
+                                    {/* Colonne 2 : barre de % (vide ici) */}
+                                    <span style={{
+                                      minWidth: 40,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'flex-end',
+                                      paddingRight: 12
+                                    }}>
+                                      {/* Pas de barre pour index */}
+                                    </span>
+                                    {/* Colonne 3 : offset */}
+                                    <span style={{
+                                      minWidth: 80,
+                                      textAlign: 'right',
+                                      fontVariantNumeric: 'tabular-nums'
+                                    }}>
+                                      Offset: {(colChild.offset_index_offset ?? colChild.column_index_offset)?.toLocaleString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
-                  }
-
-                  // Handle nested children (offset-index and column-index)
-                  return (
-                    <div
-                      key={childIdx}
-                      className={`structure-section ${child.type} ${child.type === 'column' ? 'clickable' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (child.children) {
-                          toggleCollapse(`${section.type}-${idx}-${child.type}-${childIdx}`)
-                        } else if (child.type === 'column' && child.rowGroupIndex !== undefined && child.columnIndex !== undefined) {
-                          onColumnClick(child.rowGroupIndex, child.columnIndex)
-                        }
-                      }}
-                      style={{ cursor: child.children || child.type === 'column' ? 'pointer' : 'default' }}
-                    >
-                      <div className="section-header child">
-                        {child.children && (
-                          <span className="collapse-icon">
-                            {collapsedSections.has(`${section.type}-${idx}-${child.type}-${childIdx}`) ? '▶' : '▼'}
-                          </span>
-                        )}
-                        <span className="section-label">{child.label}</span>
-                        <span className="section-offset">
-                          Offset: {child.start.toLocaleString()}
-                        </span>
-                      </div>
-                      {child.children && child.children.length > 0 && !collapsedSections.has(`${section.type}-${idx}-${child.type}-${childIdx}`) && (
-                        <div className="section-children">
-                          {child.children.map((colChild, colChildIdx) => (
-                            <div
-                              key={colChildIdx}
-                              className={`structure-section ${colChild.type}`}
-                              style={{ marginLeft: 16 }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="section-header child">
-                                <span className="section-label">{colChild.label}</span>
-                                <span className="section-offset">
-                                  Offset: {(colChild.offset_index_offset ?? colChild.column_index_offset)?.toLocaleString()}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        ))}
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <div className="structure-summary">
