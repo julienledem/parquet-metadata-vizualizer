@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "fzstd": "^0.1.1",
-    "hyparquet": "^1.20.0",
+    "hyparquet": "^1.20.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
