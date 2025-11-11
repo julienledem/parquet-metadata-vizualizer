@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ParquetPageMetadata } from '../../../src/lib/parquet-parsing'
 import './StructureView.css'
 
@@ -8,6 +9,12 @@ interface StructureViewProps {
 
 function StructureView({ metadata, onColumnClick }: StructureViewProps) {
   const { fileMetadata, rowGroups } = metadata
+
+  // State to track how many columns to display per row group
+  const [columnsPerRowGroup, setColumnsPerRowGroup] = useState<Record<number, number>>({})
+
+  // Default batch size for loading columns
+  const MAX_COLUMNS_TO_DISPLAY = 100
 
   // Calculate byte positions for visual layout
   const calculateLayout = () => {
@@ -23,6 +30,8 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
         size: number
         rowGroupIndex?: number
         columnIndex?: number
+        remainingCount?: number
+        remainingSize?: number
       }>
     }> = []
 
@@ -37,8 +46,6 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
     let currentOffset = 4
 
     // Row groups and column chunks
-    const MAX_COLUMNS_TO_DISPLAY = 100 // Limit detail view for performance
-
     rowGroups.forEach((rg, rgIndex) => {
       const rgStart = currentOffset
       const columns: Array<{
@@ -48,10 +55,15 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
         size: number
         rowGroupIndex?: number
         columnIndex?: number
+        remainingCount?: number
+        remainingSize?: number
       }> = []
 
-      // Show details for first MAX_COLUMNS_TO_DISPLAY columns, then summarize
-      const columnsToShow = Math.min(rg.columns.length, MAX_COLUMNS_TO_DISPLAY)
+      // Show details based on state or default to MAX_COLUMNS_TO_DISPLAY
+      const columnsToShow = Math.min(
+        rg.columns.length,
+        columnsPerRowGroup[rgIndex] || MAX_COLUMNS_TO_DISPLAY
+      )
 
       for (let colIndex = 0; colIndex < columnsToShow; colIndex++) {
         const col = rg.columns[colIndex]
@@ -67,16 +79,19 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
         currentOffset += colSize
       }
 
-      // If there are more columns, add summary and calculate their size
-      if (rg.columns.length > MAX_COLUMNS_TO_DISPLAY) {
-        const remainingColumns = rg.columns.slice(MAX_COLUMNS_TO_DISPLAY)
+      // If there are more columns, add "Load More" button
+      if (columnsToShow < rg.columns.length) {
+        const remainingColumns = rg.columns.slice(columnsToShow)
         const remainingSize = remainingColumns.reduce((sum, col) => sum + Number(col.totalCompressedSize), 0)
 
         columns.push({
-          type: 'column-summary',
-          label: `... and ${remainingColumns.length} more columns (${remainingSize.toLocaleString()} bytes total)`,
+          type: 'load-more-button',
+          label: `Load Next ${Math.min(MAX_COLUMNS_TO_DISPLAY, remainingColumns.length)} Columns`,
           start: currentOffset,
           size: remainingSize,
+          rowGroupIndex: rgIndex,
+          remainingCount: remainingColumns.length,
+          remainingSize: remainingSize,
         })
         currentOffset += remainingSize
       }
@@ -144,6 +159,16 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
     return layout
   }
 
+  // Handler to load more columns for a specific row group
+  const handleLoadMore = (rowGroupIndex: number) => {
+    const currentCount = columnsPerRowGroup[rowGroupIndex] || MAX_COLUMNS_TO_DISPLAY
+    const newCount = currentCount + MAX_COLUMNS_TO_DISPLAY
+    setColumnsPerRowGroup({
+      ...columnsPerRowGroup,
+      [rowGroupIndex]: newCount,
+    })
+  }
+
   const layout = calculateLayout()
 
   return (
@@ -166,25 +191,51 @@ function StructureView({ metadata, onColumnClick }: StructureViewProps) {
             </div>
             {section.children && section.children.length > 0 && (
               <div className="section-children">
-                {section.children.map((child, childIdx) => (
-                  <div
-                    key={childIdx}
-                    className={`structure-section ${child.type} ${child.type === 'column' ? 'clickable' : ''}`}
-                    onClick={() => {
-                      if (child.type === 'column' && child.rowGroupIndex !== undefined && child.columnIndex !== undefined) {
-                        onColumnClick(child.rowGroupIndex, child.columnIndex)
-                      }
-                    }}
-                    style={{ cursor: child.type === 'column' ? 'pointer' : 'default' }}
-                  >
-                    <div className="section-header child">
-                      <span className="section-label">{child.label}</span>
-                      <span className="section-offset">
-                        Offset: {child.start.toLocaleString()}
-                      </span>
+                {section.children.map((child, childIdx) => {
+                  if (child.type === 'load-more-button') {
+                    return (
+                      <div
+                        key={childIdx}
+                        className="structure-section load-more-button"
+                        style={{ cursor: 'pointer', padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}
+                        onClick={() => {
+                          if (child.rowGroupIndex !== undefined) {
+                            handleLoadMore(child.rowGroupIndex)
+                          }
+                        }}
+                      >
+                        <div className="section-header child">
+                          <span className="section-label" style={{ fontWeight: 'bold', color: '#0066cc' }}>
+                            {child.label}
+                          </span>
+                          <span className="section-offset">
+                            ({child.remainingCount?.toLocaleString()} remaining - {child.remainingSize?.toLocaleString()} bytes)
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div
+                      key={childIdx}
+                      className={`structure-section ${child.type} ${child.type === 'column' ? 'clickable' : ''}`}
+                      onClick={() => {
+                        if (child.type === 'column' && child.rowGroupIndex !== undefined && child.columnIndex !== undefined) {
+                          onColumnClick(child.rowGroupIndex, child.columnIndex)
+                        }
+                      }}
+                      style={{ cursor: child.type === 'column' ? 'pointer' : 'default' }}
+                    >
+                      <div className="section-header child">
+                        <span className="section-label">{child.label}</span>
+                        <span className="section-offset">
+                          Offset: {child.start.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
