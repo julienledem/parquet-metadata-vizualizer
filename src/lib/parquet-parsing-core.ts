@@ -5,11 +5,12 @@
  * Platform-specific I/O (Node.js fs, browser File API) is handled by separate modules.
  */
 
-import {ColumnChunk, parquetMetadata, RowGroup, snappyUncompress} from 'hyparquet'
+import { parquetMetadata, snappyUncompress } from 'hyparquet'
+import type { ColumnChunk, RowGroup } from 'hyparquet'
 import { deserializeTCompactProtocol } from 'hyparquet/src/thrift.js'
 import { PageType, Encoding } from 'hyparquet/src/constants.js'
 import { decompress as zstdDecompress } from 'fzstd'
-import { SchemaElement } from 'hyparquet/src/types.js'
+import type { SchemaElement } from 'hyparquet/src/types.js'
 
 /**
  * File metadata extracted from the Parquet footer
